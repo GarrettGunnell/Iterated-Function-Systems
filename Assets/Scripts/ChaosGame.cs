@@ -12,9 +12,9 @@ public class ChaosGame : IteratedFunctionSystem {
                 particleUpdater.SetInt("_TransformationCount", affineTransformations.GetTransformCount());
                 particleUpdater.SetInt("_ParticleCount", (int)particlesPerBatch);
                 particleUpdater.SetInt("_Seed", Mathf.CeilToInt(Random.Range(1, 1000000)));
-                particleUpdater.SetBuffer(2, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
-                particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
-                particleUpdater.Dispatch(2, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+                particleUpdater.SetBuffer(1, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
+                particleUpdater.SetBuffer(1, "_Transformations", affineTransformations.GetAffineBuffer());
+                particleUpdater.Dispatch(1, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
             }
         }
     }

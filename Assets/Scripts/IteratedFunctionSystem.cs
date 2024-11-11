@@ -167,9 +167,9 @@ public class IteratedFunctionSystem : MonoBehaviour {
         particleUpdater.SetInt("_TransformationCount", transformCount);
         particleUpdater.SetInt("_GenerationOffset", 0);
         particleUpdater.SetInt("_GenerationLimit", 3);
-        particleUpdater.SetBuffer(3, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
-        particleUpdater.SetBuffer(3, "_Transformations", affineTransformations.GetAffineBuffer());
-        particleUpdater.Dispatch(3, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+        particleUpdater.SetBuffer(2, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
+        particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
+        particleUpdater.Dispatch(2, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
 
         int iteratedParticles = 3;
         int previousGenerationSize = 3;
@@ -179,11 +179,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
             particleUpdater.SetInt("_GenerationOffset", iteratedParticles);
             particleUpdater.SetInt("_GenerationLimit", (int)Mathf.Clamp(iteratedParticles + generationSize, 0, particlesPerBatch));
 
-            particleUpdater.SetBuffer(3, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
-            particleUpdater.SetBuffer(3, "_Transformations", affineTransformations.GetAffineBuffer());
+            particleUpdater.SetBuffer(2, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
+            particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
 
             
-            particleUpdater.Dispatch(3, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+            particleUpdater.Dispatch(2, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
             
 
             iteratedParticles += generationSize;
@@ -244,12 +244,12 @@ public class IteratedFunctionSystem : MonoBehaviour {
             particleUpdater.SetInt("_MemoryOffset", clearedMemoryOffset);
 
             // Clear Voxel Grid
-            particleUpdater.SetBuffer(4, "_VoxelGrid", voxelGrid);
-            particleUpdater.Dispatch(4, Mathf.Min(clearedGroupCount, maxGroups), 1, 1);
+            particleUpdater.SetBuffer(3, "_VoxelGrid", voxelGrid);
+            particleUpdater.Dispatch(3, Mathf.Min(clearedGroupCount, maxGroups), 1, 1);
 
             // Clear Occlusion
-            particleUpdater.SetBuffer(6, "_OcclusionGrid", occlusionGrid);
-            particleUpdater.Dispatch(6, Mathf.Min(clearedGroupCount, maxGroups), 1, 1);
+            particleUpdater.SetBuffer(5, "_OcclusionGrid", occlusionGrid);
+            particleUpdater.Dispatch(5, Mathf.Min(clearedGroupCount, maxGroups), 1, 1);
 
             clearedGroupCount -= maxGroups;
             clearedMemoryOffset += maxThreadsPerGroup;
@@ -262,19 +262,19 @@ public class IteratedFunctionSystem : MonoBehaviour {
         particleUpdater.SetInt("_TransformationCount", affineTransformations.GetTransformCount());
         
         for (int i = 0; i < Mathf.Min(meshesToVoxelize, batchCount); ++i) {
-            particleUpdater.SetBuffer(5, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
-            particleUpdater.SetBuffer(5, "_VoxelGrid", voxelGrid);
-            particleUpdater.SetBuffer(5, "_Transformations", affineTransformations.GetAffineBuffer());
-            particleUpdater.Dispatch(5, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+            particleUpdater.SetBuffer(4, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
+            particleUpdater.SetBuffer(4, "_VoxelGrid", voxelGrid);
+            particleUpdater.SetBuffer(4, "_Transformations", affineTransformations.GetAffineBuffer());
+            particleUpdater.Dispatch(4, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
         }
 
         int occlusionMemoryOffset = 0;
         int occlusionGroupCount = groupCount;
-        particleUpdater.SetBuffer(7, "_VoxelGrid", voxelGrid);
-        particleUpdater.SetBuffer(7, "_OcclusionGrid", occlusionGrid);
+        particleUpdater.SetBuffer(6, "_VoxelGrid", voxelGrid);
+        particleUpdater.SetBuffer(6, "_OcclusionGrid", occlusionGrid);
         while (occlusionMemoryOffset < voxelCount) {
             particleUpdater.SetInt("_MemoryOffset", occlusionMemoryOffset);
-            particleUpdater.Dispatch(7, Mathf.Min(occlusionGroupCount, maxGroups), 1, 1);
+            particleUpdater.Dispatch(6, Mathf.Min(occlusionGroupCount, maxGroups), 1, 1);
 
             occlusionGroupCount -= maxGroups;
             occlusionMemoryOffset += maxThreadsPerGroup;

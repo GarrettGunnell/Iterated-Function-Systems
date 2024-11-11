@@ -1,5 +1,4 @@
 #pragma kernel InitializeParticles
-#pragma kernel ApplyDebugTransform
 #pragma kernel AffineTransformChaos
 #pragma kernel AffineTransformIterated
 #pragma kernel ClearVoxelBuffer
