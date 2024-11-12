@@ -8,7 +8,7 @@ using Unity.Collections.LowLevel.Unsafe;
 public class IteratedFunctionSystem : MonoBehaviour {
     public AffineTransformations affineTransformations;
 
-    public Shader pointShader, instancedPointShader;
+    public Shader instancedPointShader;
 
     public ComputeShader particleUpdater;
 
@@ -20,9 +20,9 @@ public class IteratedFunctionSystem : MonoBehaviour {
     public bool uncapped = false;
 
     public Mesh[] pointCloudMeshes;
-    private Material pointMaterial, instancedPointMaterial;
+    private Material instancedPointMaterial;
 
-    private RenderParams pointRenderParams, instancedRenderParams;
+    private RenderParams instancedRenderParams;
 
     [NonSerialized]
     public int threadsPerGroup = 64;
@@ -37,10 +37,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
     Vector3 newOrigin = Vector3.zero;
 
     void InitializeRenderParams() {
-        pointRenderParams = new RenderParams(pointMaterial);
-        pointRenderParams.worldBounds = new Bounds(Vector3.zero, 10000 * Vector3.one);
-        pointRenderParams.matProps = new MaterialPropertyBlock();
-
         instancedRenderParams = new RenderParams(instancedPointMaterial);
         instancedRenderParams.worldBounds = new Bounds(Vector3.zero, 10000 * Vector3.one);
         instancedRenderParams.matProps = new MaterialPropertyBlock();
@@ -120,9 +116,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
         renderParams.matProps.SetInt("_GridSize", voxelDimension);
         renderParams.matProps.SetInt("_GridBounds", voxelBounds);
 
-        pointRenderParams.matProps.SetBuffer("_OcclusionGrid", occlusionGrid);
-        pointRenderParams.matProps.SetInt("_GridSize", voxelDimension);
-        pointRenderParams.matProps.SetInt("_GridBounds", voxelBounds);
         instancedRenderParams.matProps.SetBuffer("_OcclusionGrid", occlusionGrid);
         instancedRenderParams.matProps.SetInt("_GridSize", voxelDimension);
         instancedRenderParams.matProps.SetInt("_GridBounds", voxelBounds);
@@ -142,7 +135,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
         Application.targetFrameRate = 120;
 
         UnsafeUtility.SetLeakDetectionMode(Unity.Collections.NativeLeakDetectionMode.Enabled);
-        pointMaterial = new Material(pointShader);
         instancedPointMaterial = new Material(instancedPointShader);
 
         InitializeMeshes();
@@ -290,27 +282,15 @@ public class IteratedFunctionSystem : MonoBehaviour {
     public Color particleColor, occlusionColor;
 
     void DrawParticles() {
-        if (instanceNextGeneration) {
-            instancedRenderParams.matProps.SetFloat("_OcclusionMultiplier", occlusionMultiplier);
-            instancedRenderParams.matProps.SetFloat("_OcclusionAttenuation", occlusionAttenuation);
-            instancedRenderParams.matProps.SetVector("_ParticleColor", particleColor);
-            instancedRenderParams.matProps.SetVector("_OcclusionColor", occlusionColor);
-            instancedRenderParams.matProps.SetMatrix("_FinalTransform", GetFinalFinalTransform());
-            instancedRenderParams.matProps.SetBuffer("_Transformations", affineTransformations.GetAffineBuffer());
+        instancedRenderParams.matProps.SetFloat("_OcclusionMultiplier", occlusionMultiplier);
+        instancedRenderParams.matProps.SetFloat("_OcclusionAttenuation", occlusionAttenuation);
+        instancedRenderParams.matProps.SetVector("_ParticleColor", particleColor);
+        instancedRenderParams.matProps.SetVector("_OcclusionColor", occlusionColor);
+        instancedRenderParams.matProps.SetMatrix("_FinalTransform", GetFinalFinalTransform());
+        instancedRenderParams.matProps.SetBuffer("_Transformations", affineTransformations.GetAffineBuffer());
 
-            for (int i = 0; i < batchCount; ++i) {
-                Graphics.RenderMeshIndirect(instancedRenderParams, pointCloudMeshes[i], instancedCommandBuffer, 1);
-            }
-
-        } else {
-            pointRenderParams.matProps.SetFloat("_OcclusionMultiplier", occlusionMultiplier);
-            pointRenderParams.matProps.SetFloat("_OcclusionAttenuation", occlusionAttenuation);
-            pointRenderParams.matProps.SetVector("_ParticleColor", particleColor);
-            pointRenderParams.matProps.SetVector("_OcclusionColor", occlusionColor);
-            pointRenderParams.matProps.SetMatrix("_FinalTransform", GetFinalFinalTransform());
-            for (int i = 0; i < batchCount; ++i) {
-                Graphics.RenderMesh(pointRenderParams, pointCloudMeshes[i], 0, Matrix4x4.identity);
-            }
+        for (int i = 0; i < batchCount; ++i) {
+            Graphics.RenderMeshIndirect(instancedRenderParams, pointCloudMeshes[i], instancedCommandBuffer, 1);
         }
     }
 

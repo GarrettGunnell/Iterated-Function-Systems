@@ -137,9 +137,6 @@ GameObject:
   - component: {fileID: 198840498}
   - component: {fileID: 198840497}
   - component: {fileID: 198840496}
-  - component: {fileID: 198840495}
-  - component: {fileID: 198840494}
-  - component: {fileID: 198840493}
   - component: {fileID: 198840492}
   - component: {fileID: 198840491}
   m_Layer: 0
@@ -162,7 +159,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affineTransformations: {fileID: 198840496}
-  pointShader: {fileID: 4800000, guid: e92bc28b2a8522941af6fa66887119e9, type: 3}
   instancedPointShader: {fileID: 4800000, guid: da60c5ceac9d93949914277c9acee32e, type: 3}
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   particlesPerBatch: 1048576
@@ -171,6 +167,7 @@ MonoBehaviour:
   updateInstanceCount: 0
   uncapped: 1
   pointCloudMeshes: []
+  predictOrigin: 0
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
@@ -194,7 +191,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affineTransformations: {fileID: 198840496}
-  pointShader: {fileID: 4800000, guid: e92bc28b2a8522941af6fa66887119e9, type: 3}
   instancedPointShader: {fileID: 4800000, guid: da60c5ceac9d93949914277c9acee32e, type: 3}
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   particlesPerBatch: 1048576
@@ -211,6 +207,7 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   - {fileID: 0}
+  predictOrigin: 0
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
@@ -222,72 +219,6 @@ MonoBehaviour:
   particleColor: {r: 0.764151, g: 0.5655022, b: 0.4793966, a: 0}
   occlusionColor: {r: 0, g: 0.08627451, b: 0.032354567, a: 0}
   iterationsPerFrame: 1
---- !u!114 &198840493
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 198840490}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ea4a6099724d02d47a98db39fa88dab9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  particleShader: {fileID: 4800000, guid: 36f77b0ca98dd5447a99bda7907756ee, type: 3}
-  particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
-  debugMode: 3
-  debugIndex: 0
-  affineIndices: {x: 0, y: 1}
-  t: 0
-  animate: 1
-  speed: 1
-  translate: {x: 5, y: 0, z: 0}
---- !u!114 &198840494
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 198840490}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ea4a6099724d02d47a98db39fa88dab9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  particleShader: {fileID: 4800000, guid: 36f77b0ca98dd5447a99bda7907756ee, type: 3}
-  particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
-  debugMode: 2
-  debugIndex: 0
-  affineIndices: {x: 0, y: 1}
-  t: 0
-  animate: 1
-  speed: 1
-  translate: {x: 0, y: 0, z: 0}
---- !u!114 &198840495
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 198840490}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ea4a6099724d02d47a98db39fa88dab9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particleMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
-  particleShader: {fileID: 4800000, guid: 36f77b0ca98dd5447a99bda7907756ee, type: 3}
-  particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
-  debugMode: 1
-  debugIndex: 0
-  affineIndices: {x: 0, y: 1}
-  t: 0
-  animate: 1
-  speed: 1
-  translate: {x: -5, y: 0, z: 0}
 --- !u!114 &198840496
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -362,9 +293,9 @@ MonoBehaviour:
   animate: 1
   speed: 1.6
   frameRateIndependent: 1
-  useRamp: 0
+  useRamp: 1
   rampSpeed: 1
-  epsilon: 0.01
+  epsilon: 3
   finalTransform:
     scale: {x: 1, y: 1, z: 1}
     shearX: {x: 0, y: 0, z: 0}
@@ -615,20 +546,20 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 993136275}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6dafb8952c4e68b4bbaee31eaaae06e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  postProcessingShader: {fileID: 4800000, guid: 504fba9c03584fc4f9149802c12aeb12, type: 3}
+  postProcessingShader: {fileID: 0}
   exposure: {x: 1, y: 1, z: 1}
-  temperature: -19
-  tint: 13
-  contrast: {x: 1.2, y: 1.2, z: 2}
+  temperature: 0
+  tint: 0
+  contrast: {x: 1, y: 1, z: 1}
   linearMidPoint: {x: 0.5, y: 0.5, z: 0.5}
   brightness: {x: 0, y: 0, z: 0}
-  colorFilter: {r: 1.1590971, g: 7.9066987, b: 6.483352, a: 0}
-  saturation: {x: 1, y: 2, z: 1}
+  colorFilter: {r: 1, g: 1, b: 1, a: 0}
+  saturation: {x: 1, y: 1, z: 1}
 --- !u!114 &993136280
 MonoBehaviour:
   m_ObjectHideFlags: 0
