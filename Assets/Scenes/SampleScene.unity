@@ -153,7 +153,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 198840490}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e4d32cc418c7c2c47adcb5f016300918, type: 3}
   m_Name: 
@@ -163,7 +163,6 @@ MonoBehaviour:
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   particlesPerBatch: 1048576
   batchCount: 1
-  instanceNextGeneration: 1
   updateInstanceCount: 0
   uncapped: 1
   pointCloudMeshes: []
@@ -185,7 +184,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 198840490}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5298ec254435b3245bb3de1e5d24443e, type: 3}
   m_Name: 
@@ -195,7 +194,6 @@ MonoBehaviour:
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   particlesPerBatch: 1048576
   batchCount: 5
-  instanceNextGeneration: 1
   updateInstanceCount: 0
   uncapped: 1
   pointCloudMeshes:
@@ -546,7 +544,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 993136275}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6dafb8952c4e68b4bbaee31eaaae06e6, type: 3}
   m_Name: 

@@ -14,7 +14,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     public uint particlesPerBatch = 200000;
     public uint batchCount = 1;
-    public bool instanceNextGeneration = true;
     public bool updateInstanceCount = true;
 
     public bool uncapped = false;
@@ -34,7 +33,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
     GraphicsBuffer instancedCommandBuffer;
     GraphicsBuffer.IndirectDrawIndexedArgs[] instancedCommandIndexedData;
 
+    private ComputeBuffer predictedTransformBuffer;
+
     Vector3 newOrigin = Vector3.zero;
+    float newScale = 1;
 
     void InitializeRenderParams() {
         instancedRenderParams = new RenderParams(instancedPointMaterial);
@@ -128,6 +130,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
         commandBuffer.SetData(commandIndexedData);
     }
 
+    void InitializePredictedTransform() {
+        predictedTransformBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector4)));
+    }
+
 
     void OnEnable() {
         // Debug.Log(SystemInfo.graphicsDeviceName);
@@ -137,10 +143,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
         UnsafeUtility.SetLeakDetectionMode(Unity.Collections.NativeLeakDetectionMode.Enabled);
         instancedPointMaterial = new Material(instancedPointShader);
 
+        
         InitializeMeshes();
         InitializeRenderParams();
-
         InitializeVoxelGrid();
+        InitializePredictedTransform();
     }
     
     public virtual void IterateSystem() {
@@ -158,13 +165,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
         particleUpdater.SetInt("_TransformationCount", transformCount);
         particleUpdater.SetInt("_GenerationOffset", 0);
-        particleUpdater.SetInt("_GenerationLimit", 3);
+        particleUpdater.SetInt("_GenerationLimit", transformCount);
         particleUpdater.SetBuffer(2, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
         particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
         particleUpdater.Dispatch(2, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
 
-        int iteratedParticles = 3;
-        int previousGenerationSize = 3;
+        int iteratedParticles = transformCount;
+        int previousGenerationSize = transformCount;
         while (iteratedParticles < particlesPerBatch) {
             int generationSize = previousGenerationSize * transformCount;
 
@@ -185,44 +192,85 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     Matrix4x4 GetFinalFinalTransform() {
         if (predictOrigin) {
-            return Matrix4x4.Translate(-newOrigin);
+            return  Matrix4x4.Scale((Vector3.one * voxelBounds) / newScale) * Matrix4x4.Translate(-newOrigin);
         }
 
         return affineTransformations.GetFinalTransform();
     }
 
     List<Vector3> gizmoPoints = new();
+
+    public bool dumpData = false;
     void PredictFinalTransform() {
-        Vector3 origin = Vector3.zero;
-        List<Vector3> points = new();
+        // Vector3 origin = Vector3.zero;
+        // List<Vector3> points = new();
 
-        var transformations = affineTransformations.GetAffineTransforms();
+        // var transformations = affineTransformations.GetAffineTransforms();
 
-        for (int i = 0; i < transformations.Count; ++i) {
-            Vector4 augmentedVector = new Vector4(origin.x, origin.y, origin.z, 1);
+        // for (int i = 0; i < transformations.Count; ++i) {
+        //     Vector4 augmentedVector = new Vector4(origin.x, origin.y, origin.z, 1);
 
-            points.Add(transformations[i] * augmentedVector);
+        //     points.Add(transformations[i] * augmentedVector);
+        // }
+
+        // List<Vector3> newPoints = new(points);
+        // for (int t = 0; t < transformations.Count; ++t) {
+        //     for (int i = 0; i < points.Count; ++i) {
+        //         Vector3 p = points[i];
+        //         Vector4 augmentedVector = new Vector4(p.x, p.y, p.z, 1);
+
+        //         newPoints.Add(transformations[t] * augmentedVector);
+        //     }
+        // }
+
+        // Vector3 vectorSum = Vector3.zero;
+
+        // for (int i = 0; i < newPoints.Count; ++i) {
+        //     vectorSum += newPoints[i];
+        // }
+
+        // newOrigin = vectorSum / newPoints.Count;
+
+        // gizmoPoints = new(newPoints);
+
+        particleUpdater.SetBuffer(7, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
+        particleUpdater.SetBuffer(7, "_PredictedTransformBuffer", predictedTransformBuffer);
+        particleUpdater.SetInt("_VertexCount", (int)particlesPerBatch);
+        particleUpdater.Dispatch(7, 1, 1, 1);
+
+        gizmoPoints.Clear();
+        Vector4[] predictedPoints = new Vector4[3];
+
+        predictedTransformBuffer.GetData(predictedPoints);
+
+        for (int i = 0; i < 2; ++i) {
+            gizmoPoints.Add(new Vector3(predictedPoints[i].x, predictedPoints[i].y, predictedPoints[i].z));
         }
 
-        List<Vector3> newPoints = new(points);
-        for (int t = 0; t < transformations.Count; ++t) {
-            for (int i = 0; i < points.Count; ++i) {
-                Vector3 p = points[i];
-                Vector4 augmentedVector = new Vector4(p.x, p.y, p.z, 1);
+        Vector3 p1 = gizmoPoints[0];
+        Vector3 p2 = gizmoPoints[1];
+    
+        float x = Mathf.Abs(p1.x - p2.x);
+        float y = Mathf.Abs(p1.y - p2.y);
+        float z = Mathf.Abs(p1.z - p2.z);
 
-                newPoints.Add(transformations[t] * augmentedVector);
+        newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
+        newScale = Mathf.Max(x, Mathf.Max(y, z));
+        newScale = Vector3.Distance(p1, p2);
+
+        if (dumpData) {
+            Vector3[] meshPoints = new Vector3[particlesPerBatch];
+            pointCloudMeshes[0].GetVertexBuffer(0).GetData(meshPoints);
+
+            for (int i = 0; i < meshPoints.Length; ++i) {
+                Debug.Log(meshPoints[i]);
             }
+
+            Debug.Log("Minimum: " + predictedPoints[0].ToString());
+            Debug.Log("Maximum: " + predictedPoints[1].ToString());
+
+            dumpData = false;
         }
-
-        Vector3 vectorSum = Vector3.zero;
-
-        for (int i = 0; i < newPoints.Count; ++i) {
-            vectorSum += newPoints[i];
-        }
-
-        newOrigin = vectorSum / newPoints.Count;
-
-        gizmoPoints = new(newPoints);
     }
 
     void Voxelize() {
@@ -311,10 +359,9 @@ public class IteratedFunctionSystem : MonoBehaviour {
         // Enable/Disable system iteration
         if (Input.GetKeyDown("r")) uncapped = !uncapped;
 
-        if (uncapped) {
+        if (uncapped && affineTransformations.GetTransformCount() != 0) {
             IterateSystem();
         }
-
 
         PredictFinalTransform();
 
@@ -340,6 +387,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         instancedCommandBuffer.Release();
         voxelGrid.Release();
         occlusionGrid.Release();
+        predictedTransformBuffer.Release();
     }
 
     void OnDrawGizmos() {
@@ -349,9 +397,21 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
         // CPU Side IFS
         Gizmos.color = Color.yellow;
-        for (int i = 0; i < gizmoPoints.Count; ++i) Gizmos.DrawSphere(gizmoPoints[i], 0.05f);
+        for (int i = 0; i < gizmoPoints.Count; ++i) Gizmos.DrawSphere(gizmoPoints[i], 0.025f);
+
+        if (gizmoPoints.Count > 0) {
+        Vector3 p1 = gizmoPoints[0];
+        Vector3 p2 = gizmoPoints[1];
+        Vector3 cubeOrigin = Vector3.Lerp(p1, p2, 0.5f);
 
         Gizmos.color = Color.green;
-        Gizmos.DrawSphere(newOrigin, 0.05f);
+        Gizmos.DrawSphere(newOrigin, 0.025f);
+
+        float x = Mathf.Abs(p1.x - p2.x);
+        float y = Mathf.Abs(p1.y - p2.y);
+        float z = Mathf.Abs(p1.z - p2.z);
+
+        Gizmos.DrawWireCube(newOrigin, Vector3.one * Mathf.Max(x, Mathf.Max(y, z)));
+        }
     }
 }
