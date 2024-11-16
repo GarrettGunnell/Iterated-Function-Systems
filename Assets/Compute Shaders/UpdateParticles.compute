@@ -67,7 +67,7 @@ float4x4 _FinalTransform;
 void AffineTransformChaos(uint3 id : SV_DispatchThreadID) {
     float3 currentPos = ReadVertex(id.x);
 
-    uint seed = (_Seed + _BatchIndex * 100000) + id.x + ceil(dot(currentPos.xyz, float3(1112, 4123, 3324)));
+    uint seed = (_Seed + _BatchIndex * 100000) + id.x;
 
     float rand = hash(seed);
     uint index = floor(rand * (_TransformationCount));
@@ -78,7 +78,7 @@ void AffineTransformChaos(uint3 id : SV_DispatchThreadID) {
 
     newPosition = mul(attractor, newPosition);
 
-    if (dot(newPosition.xyz, newPosition.xyz) > 10) newPosition = 0; // If particle shot off to infinity for some stupid reason then reset it to the origin
+    // if (dot(newPosition.xyz, newPosition.xyz) > 10000000) newPosition = 0; // If particle shot off to infinity for some stupid reason then reset it to the origin
 
     WriteVertex(id.x, newPosition.xyz);
 }

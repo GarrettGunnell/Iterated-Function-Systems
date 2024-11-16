@@ -100,6 +100,7 @@ Shader "Custom/InstancedParticle" {
 				// if (any(uint3(pos) > _GridSize) || any(pos < 0)) return;
 
 				float4 pos = mul(_FinalTransform, mul(_Transformations[instanceID], v.vertex));
+				// float4 pos = mul(_FinalTransform, v.vertex);
 
 				float gridBounds = _GridBounds * 0.5f;
 
@@ -128,7 +129,7 @@ Shader "Custom/InstancedParticle" {
 				float occlusion = getTrilinearVoxel(i.worldPos);
 
 				occlusion = pow(saturate(occlusion * _OcclusionMultiplier), _OcclusionAttenuation);
-
+				// return 1;
 				return float4(lerp(_OcclusionColor, col, occlusion), 1);
 			}
 

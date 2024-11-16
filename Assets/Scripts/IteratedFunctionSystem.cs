@@ -16,9 +16,15 @@ public class IteratedFunctionSystem : MonoBehaviour {
     public uint batchCount = 1;
     public bool updateInstanceCount = true;
 
+    public uint lowDetailParticleCount = 64;
+
+    public bool viewLowDetail = false;
+
     public bool uncapped = false;
 
     public Mesh[] pointCloudMeshes;
+    private Mesh lowDetailMesh;
+
     private Material instancedPointMaterial;
 
     private RenderParams instancedRenderParams;
@@ -29,8 +35,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
     
     public bool predictOrigin = false;
 
+    [Range(0.0f, 5.0f)]
+    public float scalePadding = 1.0f;
+
     
-    GraphicsBuffer instancedCommandBuffer;
+    GraphicsBuffer instancedCommandBuffer, lowDetailCommandBuffer;
     GraphicsBuffer.IndirectDrawIndexedArgs[] instancedCommandIndexedData;
 
     private ComputeBuffer predictedTransformBuffer;
@@ -49,6 +58,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
         instancedCommandIndexedData[0].indexCountPerInstance = particlesPerBatch;
 
         instancedCommandBuffer.SetData(instancedCommandIndexedData);
+
+        lowDetailCommandBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, GraphicsBuffer.IndirectDrawIndexedArgs.size);
+        instancedCommandIndexedData[0].indexCountPerInstance = particlesPerBatch;
+
+        lowDetailCommandBuffer.SetData(instancedCommandIndexedData);
     }
 
     void InitializeMeshes() {
@@ -132,6 +146,29 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     void InitializePredictedTransform() {
         predictedTransformBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector4)));
+
+        
+        lowDetailMesh = new Mesh();
+
+        lowDetailMesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
+        lowDetailMesh.indexBufferTarget |= GraphicsBuffer.Target.Raw;
+
+        var vp = new VertexAttributeDescriptor(UnityEngine.Rendering.VertexAttribute.Position, VertexAttributeFormat.Float32, 3);
+
+        lowDetailMesh.SetVertexBufferParams((int)lowDetailParticleCount, vp);
+        lowDetailMesh.SetIndexBufferParams((int)lowDetailParticleCount, IndexFormat.UInt32);
+
+        lowDetailMesh.SetSubMesh(0, new SubMeshDescriptor(0, (int)lowDetailParticleCount, MeshTopology.Points), MeshUpdateFlags.DontRecalculateBounds);
+
+        // Initialize point cloud vertices
+        int cubeRootParticleCount = Mathf.CeilToInt(Mathf.Pow(lowDetailParticleCount, 1.0f / 3.0f));
+        particleUpdater.SetInt("_CubeResolution", cubeRootParticleCount);
+        particleUpdater.SetFloat("_CubeSize", 1.0f / cubeRootParticleCount);
+        particleUpdater.SetInt("_ParticleCount", (int)lowDetailParticleCount);
+
+        particleUpdater.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+        particleUpdater.SetBuffer(0, "_IndexBuffer", lowDetailMesh.GetIndexBuffer());
+        particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
     }
 
 
@@ -202,40 +239,47 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     public bool dumpData = false;
     void PredictFinalTransform() {
-        // Vector3 origin = Vector3.zero;
-        // List<Vector3> points = new();
+        // Reset System
+        int cubeRootParticleCount = Mathf.CeilToInt(Mathf.Pow(lowDetailParticleCount, 1.0f / 3.0f));
+        particleUpdater.SetInt("_CubeResolution", cubeRootParticleCount);
+        particleUpdater.SetFloat("_CubeSize", 0);
 
-        // var transformations = affineTransformations.GetAffineTransforms();
+        particleUpdater.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+        particleUpdater.SetBuffer(0, "_IndexBuffer", lowDetailMesh.GetIndexBuffer());
+        particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
 
-        // for (int i = 0; i < transformations.Count; ++i) {
-        //     Vector4 augmentedVector = new Vector4(origin.x, origin.y, origin.z, 1);
+        // Seed First Iteration
+        int transformCount = affineTransformations.GetTransformCount();
 
-        //     points.Add(transformations[i] * augmentedVector);
-        // }
+        particleUpdater.SetInt("_TransformationCount", transformCount);
+        particleUpdater.SetInt("_GenerationOffset", 0);
+        particleUpdater.SetInt("_GenerationLimit", transformCount);
+        particleUpdater.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+        particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
+        particleUpdater.Dispatch(2, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
 
-        // List<Vector3> newPoints = new(points);
-        // for (int t = 0; t < transformations.Count; ++t) {
-        //     for (int i = 0; i < points.Count; ++i) {
-        //         Vector3 p = points[i];
-        //         Vector4 augmentedVector = new Vector4(p.x, p.y, p.z, 1);
+        int iteratedParticles = transformCount;
+        int previousGenerationSize = transformCount;
+        while (iteratedParticles < lowDetailParticleCount) {
+            int generationSize = previousGenerationSize * transformCount;
 
-        //         newPoints.Add(transformations[t] * augmentedVector);
-        //     }
-        // }
+            particleUpdater.SetInt("_GenerationOffset", iteratedParticles);
+            particleUpdater.SetInt("_GenerationLimit", (int)Mathf.Clamp(iteratedParticles + generationSize, 0, lowDetailParticleCount));
 
-        // Vector3 vectorSum = Vector3.zero;
+            particleUpdater.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+            particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
 
-        // for (int i = 0; i < newPoints.Count; ++i) {
-        //     vectorSum += newPoints[i];
-        // }
+            
+            particleUpdater.Dispatch(2, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+            
 
-        // newOrigin = vectorSum / newPoints.Count;
+            iteratedParticles += generationSize;
+            previousGenerationSize = generationSize;
+        }
 
-        // gizmoPoints = new(newPoints);
-
-        particleUpdater.SetBuffer(7, "_VertexBuffer", pointCloudMeshes[0].GetVertexBuffer(0));
+        particleUpdater.SetBuffer(7, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
         particleUpdater.SetBuffer(7, "_PredictedTransformBuffer", predictedTransformBuffer);
-        particleUpdater.SetInt("_VertexCount", (int)particlesPerBatch);
+        particleUpdater.SetInt("_VertexCount", (int)lowDetailParticleCount);
         particleUpdater.Dispatch(7, 1, 1, 1);
 
         gizmoPoints.Clear();
@@ -256,11 +300,12 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
         newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
         newScale = Mathf.Max(x, Mathf.Max(y, z));
-        newScale = Vector3.Distance(p1, p2);
+        // newScale = Vector3.Distance(p1, p2);
+        newScale *= scalePadding;
 
         if (dumpData) {
-            Vector3[] meshPoints = new Vector3[particlesPerBatch];
-            pointCloudMeshes[0].GetVertexBuffer(0).GetData(meshPoints);
+            Vector3[] meshPoints = new Vector3[lowDetailParticleCount];
+            lowDetailMesh.GetVertexBuffer(0).GetData(meshPoints);
 
             for (int i = 0; i < meshPoints.Length; ++i) {
                 Debug.Log(meshPoints[i]);
@@ -337,8 +382,12 @@ public class IteratedFunctionSystem : MonoBehaviour {
         instancedRenderParams.matProps.SetMatrix("_FinalTransform", GetFinalFinalTransform());
         instancedRenderParams.matProps.SetBuffer("_Transformations", affineTransformations.GetAffineBuffer());
 
-        for (int i = 0; i < batchCount; ++i) {
-            Graphics.RenderMeshIndirect(instancedRenderParams, pointCloudMeshes[i], instancedCommandBuffer, 1);
+        if (viewLowDetail) {
+            Graphics.RenderMeshIndirect(instancedRenderParams, lowDetailMesh, lowDetailCommandBuffer, 1);
+        } else {
+            for (int i = 0; i < batchCount; ++i) {
+                Graphics.RenderMeshIndirect(instancedRenderParams, pointCloudMeshes[i], instancedCommandBuffer, 1);
+            }
         }
     }
 
@@ -360,10 +409,9 @@ public class IteratedFunctionSystem : MonoBehaviour {
         if (Input.GetKeyDown("r")) uncapped = !uncapped;
 
         if (uncapped && affineTransformations.GetTransformCount() != 0) {
+            PredictFinalTransform();
             IterateSystem();
         }
-
-        PredictFinalTransform();
 
         Voxelize();
 
@@ -381,10 +429,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
             UnityEngine.Object.Destroy(pointCloudMeshes[i]);
         }
+
+        UnityEngine.Object.Destroy(lowDetailMesh);
         
         pointCloudMeshes = null;
         commandBuffer.Release();
         instancedCommandBuffer.Release();
+        lowDetailCommandBuffer.Release();
         voxelGrid.Release();
         occlusionGrid.Release();
         predictedTransformBuffer.Release();
@@ -400,18 +451,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
         for (int i = 0; i < gizmoPoints.Count; ++i) Gizmos.DrawSphere(gizmoPoints[i], 0.025f);
 
         if (gizmoPoints.Count > 0) {
-        Vector3 p1 = gizmoPoints[0];
-        Vector3 p2 = gizmoPoints[1];
-        Vector3 cubeOrigin = Vector3.Lerp(p1, p2, 0.5f);
 
         Gizmos.color = Color.green;
         Gizmos.DrawSphere(newOrigin, 0.025f);
 
-        float x = Mathf.Abs(p1.x - p2.x);
-        float y = Mathf.Abs(p1.y - p2.y);
-        float z = Mathf.Abs(p1.z - p2.z);
-
-        Gizmos.DrawWireCube(newOrigin, Vector3.one * Mathf.Max(x, Mathf.Max(y, z)));
+        Gizmos.DrawWireCube(newOrigin, Vector3.one * newScale);
         }
     }
 }
