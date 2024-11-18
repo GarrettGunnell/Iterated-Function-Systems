@@ -10,7 +10,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     public Shader instancedPointShader;
 
-    public ComputeShader particleUpdater;
+    public ComputeShader particleUpdater, parallelReducer;
 
     public uint particlesPerBatch = 200000;
     public uint batchCount = 1;
@@ -277,10 +277,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
             previousGenerationSize = generationSize;
         }
 
-        particleUpdater.SetBuffer(7, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-        particleUpdater.SetBuffer(7, "_PredictedTransformBuffer", predictedTransformBuffer);
-        particleUpdater.SetInt("_VertexCount", (int)lowDetailParticleCount);
-        particleUpdater.Dispatch(7, 1, 1, 1);
+        parallelReducer.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+        parallelReducer.SetBuffer(0, "_PredictedTransformBuffer", predictedTransformBuffer);
+        parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
+        parallelReducer.Dispatch(0, 1, 1, 1);
 
         gizmoPoints.Clear();
         Vector4[] predictedPoints = new Vector4[3];
@@ -299,6 +299,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         float z = Mathf.Abs(p1.z - p2.z);
 
         newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
+        newOrigin = Vector3.Lerp(p1, p2, 0.5f);
         newScale = Mathf.Max(x, Mathf.Max(y, z));
         // newScale = Vector3.Distance(p1, p2);
         newScale *= scalePadding;

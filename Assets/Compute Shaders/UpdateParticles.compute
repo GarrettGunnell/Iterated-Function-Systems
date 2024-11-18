@@ -5,7 +5,6 @@
 #pragma kernel VoxelizePositions
 #pragma kernel ClearOcclusion
 #pragma kernel CalculateOcclusion
-#pragma kernel PredictFinalTransform
 
 #define SIZEOF_UINT 4
 #define SIZEOF_FLOAT3 12
@@ -171,29 +170,4 @@ void CalculateOcclusion(uint3 id : SV_DispatchThreadID) {
     // if (neighborCount == 10) occlusion = 0.25f;
 
     _OcclusionGrid[id.x + _MemoryOffset] = (1 - occlusion);
-}
-
-RWStructuredBuffer<float4> _PredictedTransformBuffer;
-int _VertexCount;
-
-[numthreads(1, 1, 1)]
-void PredictFinalTransform(uint3 id : SV_DISPATCHTHREADID) {
-    float3 minPos = 0;
-    float3 maxPos = 0;
-
-    float3 avgPos = 0;
-
-    for (int i = 0; i < _VertexCount; ++i) {
-        float3 v = ReadVertex(i);
-
-        minPos = min(minPos, v);
-        maxPos = max(maxPos, v);
-        avgPos += v;
-    }
-
-    if (id.x == 0) {
-        _PredictedTransformBuffer[0] = float4(minPos, 1);
-        _PredictedTransformBuffer[1] = float4(maxPos, 1);
-        _PredictedTransformBuffer[2] = float4(avgPos / (float)_VertexCount, 1);
-    }
 }

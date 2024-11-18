@@ -1,0 +1,42 @@
+#pragma kernel SingleThreadReduce
+
+#define SIZEOF_UINT 4
+#define SIZEOF_FLOAT3 12
+
+RWByteAddressBuffer _VertexBuffer;
+
+void WriteVertex(uint offset, float3 v) {
+    uint addr = offset * SIZEOF_FLOAT3;
+    _VertexBuffer.Store3(addr, asuint(v));
+}
+
+float3 ReadVertex(uint offset) {
+    uint addr = offset * SIZEOF_FLOAT3;
+
+    return asfloat(_VertexBuffer.Load3(addr));
+}
+
+RWStructuredBuffer<float4> _PredictedTransformBuffer;
+int _VertexCount;
+
+[numthreads(1, 1, 1)]
+void SingleThreadReduce(uint3 id : SV_DISPATCHTHREADID) {
+    float3 minPos = 0;
+    float3 maxPos = 0;
+
+    float3 avgPos = 0;
+
+    for (int i = 0; i < _VertexCount; ++i) {
+        float3 v = ReadVertex(i);
+
+        minPos = min(minPos, v);
+        maxPos = max(maxPos, v);
+        avgPos += v;
+    }
+
+    if (id.x == 0) {
+        _PredictedTransformBuffer[0] = float4(minPos, 1);
+        _PredictedTransformBuffer[1] = float4(maxPos, 1);
+        _PredictedTransformBuffer[2] = float4(avgPos / (float)_VertexCount, 1);
+    }
+}
