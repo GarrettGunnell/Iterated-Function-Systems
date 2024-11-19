@@ -30,6 +30,11 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
 #define MIN_REDUCTION 0
 #define MAX_REDUCTION 1
 
+#define INTERLEAVED_ADDRESSING_DIVERGENT 0
+#define INTERLEAVED_ADDRESSING_BANK_CONFLICT 1
+
+#define REDUCTION_METHOD INTERLEAVED_ADDRESSING_BANK_CONFLICT
+
 groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE * 2];
 
 void Load(uint gid, uint id) {
@@ -51,6 +56,7 @@ float3 ReductionOperator(uint operation, float3 v1, float3 v2) {
 }
 
 void Reduce(uint operation, uint id, uint bufferSize) {
+    #if REDUCTION_METHOD == INTERLEAVED_ADDRESSING_DIVERGENT
     for (uint s = 1; s < bufferSize; s *= 2) {
         if (id % (2 * s) == 0) {
             float3 v = gs_Reduce[id];
@@ -59,6 +65,18 @@ void Reduce(uint operation, uint id, uint bufferSize) {
 
         GroupMemoryBarrierWithGroupSync();
     }
+    #elif REDUCTION_METHOD == INTERLEAVED_ADDRESSING_BANK_CONFLICT
+    for (uint s = 1; s < bufferSize; s *= 2) {
+        uint index = 2 * s * id;
+
+        if (index < bufferSize) {
+            float3 v = gs_Reduce[id];
+            gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+    #endif
 }
 
 
