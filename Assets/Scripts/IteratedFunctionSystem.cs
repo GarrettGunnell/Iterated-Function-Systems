@@ -40,6 +40,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         SingleGroupReduce
     }; public BoundsCalculationMode boundsCalculationMode;
 
+    public bool halfGroupCount = true;
+
     [Range(0.0f, 5.0f)]
     public float scalePadding = 1.0f;
 
@@ -296,22 +298,24 @@ public class IteratedFunctionSystem : MonoBehaviour {
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(0, 1, 1, 1);
         } else {
-            int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / 128);
+            int reductionGroupSize = 128;
+
+            int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / reductionGroupSize);
 
             // Initial Min Reduce
             parallelReducer.SetBuffer(3, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
             parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
-            parallelReducer.Dispatch(3, reductionGroupCount, 1, 1);
+            parallelReducer.Dispatch(3, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
             
-            while (reductionGroupCount > 128) {
-                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / 128);
+            while (reductionGroupCount > reductionGroupSize) {
+                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / reductionGroupSize);
 
                 // Global Min Reduce
                 parallelReducer.SetBuffer(3, "_InputBuffer", reductionBuffer);
                 parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
                 parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-                parallelReducer.Dispatch(3, reductionGroupCount, 1, 1);
+                parallelReducer.Dispatch(3, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
             }
 
             // Final Min Reduce
@@ -321,22 +325,22 @@ public class IteratedFunctionSystem : MonoBehaviour {
             parallelReducer.Dispatch(1, 1, 1, 1);
 
             // Reset
-            reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / 128);
+            reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / reductionGroupSize);
 
             // Initial Max Reduce
             parallelReducer.SetBuffer(4, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
             parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
-            parallelReducer.Dispatch(4, reductionGroupCount, 1, 1);
+            parallelReducer.Dispatch(4, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
 
-            while (reductionGroupCount > 128) {
-                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / 128);
+            while (reductionGroupCount > reductionGroupSize) {
+                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / reductionGroupSize);
 
                 // Global Max Reduce
                 parallelReducer.SetBuffer(4, "_InputBuffer", reductionBuffer);
                 parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
                 parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-                parallelReducer.Dispatch(4, reductionGroupCount, 1, 1);
+                parallelReducer.Dispatch(4, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
             }
 
             // Final Min Reduce

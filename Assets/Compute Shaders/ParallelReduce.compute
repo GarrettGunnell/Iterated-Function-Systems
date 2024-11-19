@@ -36,14 +36,12 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
 
 #define REDUCTION_METHOD SEQUENTIAL_ADDRESSING
 
+#define SINGLE_LOAD 0
+#define DOUBLE_LOAD 1
+
+#define LOAD_METHOD DOUBLE_LOAD
+
 groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE * 2];
-
-void Load(uint gid, uint id) {
-    gs_Reduce[gid] = _InputBuffer[id];
-
-    AllMemoryBarrierWithGroupSync();
-
-}
 
 float3 ReductionOperator(uint operation, float3 v1, float3 v2) {
     if (operation == MIN_REDUCTION) {
@@ -56,7 +54,22 @@ float3 ReductionOperator(uint operation, float3 v1, float3 v2) {
     return 0;
 }
 
+
 // Reduction kernels and optimization progression referenced from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+
+void Load(uint operation, uint groupThreadID, uint globalThreadID, uint groupID, uint reductionBufferSize) {
+    #if LOAD_METHOD == SINGLE_LOAD
+    gs_Reduce[groupThreadID] = _InputBuffer[globalThreadID];
+    #elif LOAD_METHOD == DOUBLE_LOAD // Reduction #4 -- Slide 18
+    uint tid = groupThreadID;
+    uint i = groupID * (reductionBufferSize * 2) + groupThreadID;
+
+    gs_Reduce[tid] = ReductionOperator(operation, _InputBuffer[i], _InputBuffer[i + reductionBufferSize]);
+    #endif
+
+    AllMemoryBarrierWithGroupSync();
+
+}
 
 void Reduce(uint operation, uint id, uint bufferSize) {
     #if REDUCTION_METHOD == INTERLEAVED_ADDRESSING_DIVERGENT // Reduction #1 -- Slide 9 (PROBLEM: Divergent branch in loop)
@@ -93,7 +106,7 @@ void Reduce(uint operation, uint id, uint bufferSize) {
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void SingleGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(id.x, id.x);
+    Load(MIN_REDUCTION, id.x, id.x, gid.x, _ReductionBufferSize);
 
     Reduce(MIN_REDUCTION, id.x, _ReductionBufferSize);
 
@@ -104,7 +117,7 @@ void SingleGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupT
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void SingleGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(id.x, id.x);
+    Load(MAX_REDUCTION, id.x, id.x, gid.x, _ReductionBufferSize);
 
     Reduce(MAX_REDUCTION, id.x, _ReductionBufferSize);
 
@@ -115,7 +128,7 @@ void SingleGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupT
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void MultiGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(gtid.x, id.x);
+    Load(MIN_REDUCTION, gtid.x, id.x, gid.x, REDUCTION_GROUP_SIZE);
 
     Reduce(MIN_REDUCTION, gtid.x, REDUCTION_GROUP_SIZE);
 
@@ -126,7 +139,7 @@ void MultiGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupTh
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void MultiGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(gtid.x, id.x);
+    Load(MAX_REDUCTION, gtid.x, id.x, gid.x, REDUCTION_GROUP_SIZE);
 
     Reduce(MAX_REDUCTION, gtid.x, REDUCTION_GROUP_SIZE);
 
