@@ -177,6 +177,7 @@ MonoBehaviour:
   voxelBounds: 3
   voxelSize: 0.02
   meshesToVoxelize: 1
+  useLowDetailForVoxels: 0
   renderVoxels: 0
   dumpData: 0
   occlusionMultiplier: 1
@@ -202,7 +203,7 @@ MonoBehaviour:
   particlesPerBatch: 1048576
   batchCount: 5
   updateInstanceCount: 0
-  lowDetailParticleCount: 256
+  lowDetailParticleCount: 32768
   viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes:
@@ -222,6 +223,7 @@ MonoBehaviour:
   voxelBounds: 3
   voxelSize: 0.02
   meshesToVoxelize: 11
+  useLowDetailForVoxels: 0
   renderVoxels: 0
   dumpData: 0
   occlusionMultiplier: 1.66

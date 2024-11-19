@@ -110,6 +110,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
     [Range(1, 32)]
     public int meshesToVoxelize = 1;
 
+    public bool useLowDetailForVoxels = false;
+
     public bool renderVoxels = false;
     private int voxelDimension, voxelCount;
     private Material voxelMaterial;
@@ -416,11 +418,19 @@ public class IteratedFunctionSystem : MonoBehaviour {
         particleUpdater.SetMatrix("_FinalTransform", GetFinalFinalTransform());
         particleUpdater.SetInt("_TransformationCount", affineTransformations.GetTransformCount());
         
-        for (int i = 0; i < Mathf.Min(meshesToVoxelize, batchCount); ++i) {
-            particleUpdater.SetBuffer(4, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
+        if (useLowDetailForVoxels) {
+            particleUpdater.SetBuffer(4, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
             particleUpdater.SetBuffer(4, "_VoxelGrid", voxelGrid);
             particleUpdater.SetBuffer(4, "_Transformations", affineTransformations.GetAffineBuffer());
-            particleUpdater.Dispatch(4, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+            particleUpdater.Dispatch(4, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+        }
+        else {
+            for (int i = 0; i < Mathf.Min(meshesToVoxelize, batchCount); ++i) {
+                particleUpdater.SetBuffer(4, "_VertexBuffer", pointCloudMeshes[i].GetVertexBuffer(0));
+                particleUpdater.SetBuffer(4, "_VoxelGrid", voxelGrid);
+                particleUpdater.SetBuffer(4, "_Transformations", affineTransformations.GetAffineBuffer());
+                particleUpdater.Dispatch(4, Mathf.CeilToInt(particlesPerBatch / threadsPerGroup), 1, 1);
+            }
         }
 
         int occlusionMemoryOffset = 0;
