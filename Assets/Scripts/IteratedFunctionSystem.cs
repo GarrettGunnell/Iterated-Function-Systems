@@ -35,6 +35,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
     
     public bool predictOrigin = false;
 
+    public enum BoundsCalculationMode {
+        SingleThreadedScan = 0,
+        SingleGroupReduce
+    }; public BoundsCalculationMode boundsCalculationMode;
+
     [Range(0.0f, 5.0f)]
     public float scalePadding = 1.0f;
 
@@ -277,10 +282,21 @@ public class IteratedFunctionSystem : MonoBehaviour {
             previousGenerationSize = generationSize;
         }
 
-        parallelReducer.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-        parallelReducer.SetBuffer(0, "_PredictedTransformBuffer", predictedTransformBuffer);
-        parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
-        parallelReducer.Dispatch(0, 1, 1, 1);
+        if (boundsCalculationMode == BoundsCalculationMode.SingleThreadedScan) {
+            parallelReducer.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(0, "_PredictedTransformBuffer", predictedTransformBuffer);
+            parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
+            parallelReducer.Dispatch(0, 1, 1, 1);
+        } else {
+            parallelReducer.SetBuffer(1, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(1, "_PredictedTransformBuffer", predictedTransformBuffer);
+            parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
+            parallelReducer.Dispatch(1, 1, 1, 1);
+
+            parallelReducer.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(2, "_PredictedTransformBuffer", predictedTransformBuffer);
+            parallelReducer.Dispatch(2, 1, 1, 1);
+        }
 
         gizmoPoints.Clear();
         Vector4[] predictedPoints = new Vector4[3];
