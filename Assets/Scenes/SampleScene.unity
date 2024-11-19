@@ -153,7 +153,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 198840490}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e4d32cc418c7c2c47adcb5f016300918, type: 3}
   m_Name: 
@@ -161,18 +161,24 @@ MonoBehaviour:
   affineTransformations: {fileID: 198840496}
   instancedPointShader: {fileID: 4800000, guid: da60c5ceac9d93949914277c9acee32e, type: 3}
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
+  parallelReducer: {fileID: 0}
   particlesPerBatch: 1048576
   batchCount: 1
   updateInstanceCount: 0
+  lowDetailParticleCount: 64
+  viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes: []
   predictOrigin: 0
+  boundsCalculationMode: 0
+  scalePadding: 1
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
   voxelSize: 0.02
   meshesToVoxelize: 1
   renderVoxels: 0
+  dumpData: 0
   occlusionMultiplier: 1
   occlusionAttenuation: 1
   particleColor: {r: 0.8537736, g: 1, b: 0.8947165, a: 0}
@@ -184,7 +190,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 198840490}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5298ec254435b3245bb3de1e5d24443e, type: 3}
   m_Name: 
@@ -192,9 +198,12 @@ MonoBehaviour:
   affineTransformations: {fileID: 198840496}
   instancedPointShader: {fileID: 4800000, guid: da60c5ceac9d93949914277c9acee32e, type: 3}
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
+  parallelReducer: {fileID: 7200000, guid: 3285589765ffd20489593752acd50a05, type: 3}
   particlesPerBatch: 1048576
   batchCount: 5
   updateInstanceCount: 0
+  lowDetailParticleCount: 256
+  viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes:
   - {fileID: 0}
@@ -206,12 +215,15 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   predictOrigin: 0
+  boundsCalculationMode: 0
+  scalePadding: 1
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
   voxelSize: 0.02
   meshesToVoxelize: 11
   renderVoxels: 0
+  dumpData: 0
   occlusionMultiplier: 1.66
   occlusionAttenuation: 1.42
   particleColor: {r: 0.764151, g: 0.5655022, b: 0.4793966, a: 0}
@@ -288,7 +300,7 @@ MonoBehaviour:
     m_RotationOrder: 4
   useAnimationCurve: 0
   t: 0
-  animate: 1
+  animate: 0
   speed: 1.6
   frameRateIndependent: 1
   useRamp: 1

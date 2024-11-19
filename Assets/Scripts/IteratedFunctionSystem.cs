@@ -48,6 +48,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
     GraphicsBuffer.IndirectDrawIndexedArgs[] instancedCommandIndexedData;
 
     private ComputeBuffer predictedTransformBuffer;
+    private ComputeBuffer reductionBuffer;
 
     Vector3 newOrigin = Vector3.zero;
     float newScale = 1;
@@ -150,7 +151,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
     }
 
     void InitializePredictedTransform() {
-        predictedTransformBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector4)));
+        predictedTransformBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
 
         
         lowDetailMesh = new Mesh();
@@ -174,6 +175,11 @@ public class IteratedFunctionSystem : MonoBehaviour {
         particleUpdater.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
         particleUpdater.SetBuffer(0, "_IndexBuffer", lowDetailMesh.GetIndexBuffer());
         particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+
+        int totalReductionGroups = Mathf.CeilToInt(lowDetailParticleCount / 128);
+        reductionBuffer = new ComputeBuffer(Mathf.CeilToInt(lowDetailParticleCount / totalReductionGroups), System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
+
+
     }
 
 
@@ -283,23 +289,44 @@ public class IteratedFunctionSystem : MonoBehaviour {
         }
 
         if (boundsCalculationMode == BoundsCalculationMode.SingleThreadedScan) {
-            parallelReducer.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(0, "_PredictedTransformBuffer", predictedTransformBuffer);
-            parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
+            parallelReducer.SetBuffer(0, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(0, "_OutputBuffer", predictedTransformBuffer);
+            parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(0, 1, 1, 1);
         } else {
-            parallelReducer.SetBuffer(1, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(1, "_PredictedTransformBuffer", predictedTransformBuffer);
-            parallelReducer.SetInt("_VertexCount", (int)lowDetailParticleCount);
+            int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / 128);
+            // Initial Min Reduce
+            parallelReducer.SetBuffer(3, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
+            parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
+            parallelReducer.Dispatch(3, reductionGroupCount, 1, 1);
+
+            // Final Size
+            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+            // Debug.Log(reductionGroupCount);
+
+            // Final Min Reduce
+            parallelReducer.SetBuffer(1, "_InputBuffer", reductionBuffer);
+            parallelReducer.SetBuffer(1, "_OutputBuffer", predictedTransformBuffer);
             parallelReducer.Dispatch(1, 1, 1, 1);
 
-            parallelReducer.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(2, "_PredictedTransformBuffer", predictedTransformBuffer);
+            // Initial Max Reduce
+            parallelReducer.SetBuffer(4, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
+            parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
+            parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
+            parallelReducer.Dispatch(4, reductionGroupCount, 1, 1);
+
+            // Final Size
+            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+
+            // Final Min Reduce
+            parallelReducer.SetBuffer(2, "_InputBuffer", reductionBuffer);
+            parallelReducer.SetBuffer(2, "_OutputBuffer", predictedTransformBuffer);
             parallelReducer.Dispatch(2, 1, 1, 1);
         }
 
         gizmoPoints.Clear();
-        Vector4[] predictedPoints = new Vector4[3];
+        Vector3[] predictedPoints = new Vector3[3];
 
         predictedTransformBuffer.GetData(predictedPoints);
 
@@ -448,7 +475,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         }
 
         UnityEngine.Object.Destroy(lowDetailMesh);
-        
+
+        reductionBuffer.Release();
         pointCloudMeshes = null;
         commandBuffer.Release();
         instancedCommandBuffer.Release();

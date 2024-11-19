@@ -1,45 +1,27 @@
 #pragma kernel SingleThreadedScan
 #pragma kernel SingleGroupMinReduce
 #pragma kernel SingleGroupMaxReduce
+#pragma kernel MultiGroupMinReduce
+#pragma kernel MultiGroupMaxReduce
 
-#define SIZEOF_UINT 4
-#define SIZEOF_FLOAT3 12
-
-RWByteAddressBuffer _VertexBuffer;
-
-void WriteVertex(uint offset, float3 v) {
-    uint addr = offset * SIZEOF_FLOAT3;
-    _VertexBuffer.Store3(addr, asuint(v));
-}
-
-float3 ReadVertex(uint offset) {
-    uint addr = offset * SIZEOF_FLOAT3;
-
-    return asfloat(_VertexBuffer.Load3(addr));
-}
-
-RWStructuredBuffer<float4> _PredictedTransformBuffer;
-int _VertexCount;
+RWStructuredBuffer<float3> _OutputBuffer, _InputBuffer;
+uint _ReductionBufferSize;
 
 [numthreads(1, 1, 1)]
 void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
     float3 minPos = 1000000000000000.0f;
     float3 maxPos = -1000000000000000.0f;
 
-    float3 avgPos = 0;
-
-    for (int i = 0; i < _VertexCount; ++i) {
-        float3 v = ReadVertex(i);
+    for (uint i = 0; i < _ReductionBufferSize; ++i) {
+        float3 v = _InputBuffer[i];
 
         minPos = min(minPos, v);
         maxPos = max(maxPos, v);
-        avgPos += v;
     }
 
     if (id.x == 0) {
-        _PredictedTransformBuffer[0] = float4(minPos, 1);
-        _PredictedTransformBuffer[1] = float4(maxPos, 1);
-        _PredictedTransformBuffer[2] = float4(avgPos / (float)_VertexCount, 1);
+        _OutputBuffer[0] = minPos;
+        _OutputBuffer[1] = maxPos;
     }
 }
 
@@ -49,11 +31,11 @@ groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE * 2];
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void SingleGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    gs_Reduce[id.x] = ReadVertex(id.x);
+    gs_Reduce[id.x] = _InputBuffer[id.x];
 
     AllMemoryBarrierWithGroupSync();
 
-    for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
+    for (uint s = 1; s < _ReductionBufferSize; s *= 2) {
         if (id.x % (2 * s) == 0) {
             float3 v = gs_Reduce[id.x];
             gs_Reduce[id.x] = min(v, gs_Reduce[id.x + s]);
@@ -63,17 +45,17 @@ void SingleGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupT
     }
 
     if (id.x == 0) {
-        _PredictedTransformBuffer[0] = float4(gs_Reduce[0], 1);
+        _OutputBuffer[0] = gs_Reduce[0];
     }
 }
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
 void SingleGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    gs_Reduce[id.x] = ReadVertex(id.x);
+    gs_Reduce[id.x] = _InputBuffer[id.x];
 
     AllMemoryBarrierWithGroupSync();
 
-    for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
+    for (uint s = 1; s < _ReductionBufferSize; s *= 2) {
         if (id.x % (2 * s) == 0) {
             float3 v = gs_Reduce[id.x];
             gs_Reduce[id.x] = max(v, gs_Reduce[id.x + s]);
@@ -83,6 +65,46 @@ void SingleGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupT
     }
 
     if (id.x == 0) {
-        _PredictedTransformBuffer[1] = float4(gs_Reduce[0], 1);
+        _OutputBuffer[1] = gs_Reduce[0];
+    }
+}
+
+[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
+void MultiGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
+    gs_Reduce[gtid.x] = _InputBuffer[id.x];
+
+    AllMemoryBarrierWithGroupSync();
+
+    for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
+        if ((gtid.x % (2 * s) == 0) && id.x < _ReductionBufferSize) {
+            float3 v = gs_Reduce[gtid.x];
+            gs_Reduce[gtid.x] = min(v, gs_Reduce[gtid.x + s]);
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (gtid.x == 0) {
+        _OutputBuffer[gid.x] = gs_Reduce[0];
+    }
+}
+
+[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
+void MultiGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
+    gs_Reduce[gtid.x] = _InputBuffer[id.x];
+
+    AllMemoryBarrierWithGroupSync();
+
+    for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
+        if ((gtid.x % (2 * s) == 0) && id.x < _ReductionBufferSize) {
+            float3 v = gs_Reduce[gtid.x];
+            gs_Reduce[gtid.x] = max(v, gs_Reduce[gtid.x + s]);
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (gtid.x == 0) {
+        _OutputBuffer[gid.x] = gs_Reduce[0];
     }
 }
