@@ -76,7 +76,7 @@ void MultiGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupTh
     AllMemoryBarrierWithGroupSync();
 
     for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
-        if ((gtid.x % (2 * s) == 0) && id.x < _ReductionBufferSize) {
+        if ((gtid.x % (2 * s) == 0)) {
             float3 v = gs_Reduce[gtid.x];
             gs_Reduce[gtid.x] = min(v, gs_Reduce[gtid.x + s]);
         }
@@ -96,7 +96,7 @@ void MultiGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupTh
     AllMemoryBarrierWithGroupSync();
 
     for (uint s = 1; s < REDUCTION_GROUP_SIZE; s *= 2) {
-        if ((gtid.x % (2 * s) == 0) && id.x < _ReductionBufferSize) {
+        if ((gtid.x % (2 * s) == 0)) {
             float3 v = gs_Reduce[gtid.x];
             gs_Reduce[gtid.x] = max(v, gs_Reduce[gtid.x + s]);
         }

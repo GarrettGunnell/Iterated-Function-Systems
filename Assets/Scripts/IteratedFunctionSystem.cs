@@ -177,7 +177,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
 
         int totalReductionGroups = Mathf.CeilToInt(lowDetailParticleCount / 128);
-        reductionBuffer = new ComputeBuffer(Mathf.CeilToInt(lowDetailParticleCount / totalReductionGroups), System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
+        reductionBuffer = new ComputeBuffer(totalReductionGroups, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
 
 
     }
@@ -295,20 +295,31 @@ public class IteratedFunctionSystem : MonoBehaviour {
             parallelReducer.Dispatch(0, 1, 1, 1);
         } else {
             int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / 128);
+
             // Initial Min Reduce
             parallelReducer.SetBuffer(3, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
             parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(3, reductionGroupCount, 1, 1);
+            
+            while (reductionGroupCount > 128) {
+                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / 128);
 
-            // Final Size
-            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-            // Debug.Log(reductionGroupCount);
+                // Global Min Reduce
+                parallelReducer.SetBuffer(3, "_InputBuffer", reductionBuffer);
+                parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
+                parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+                parallelReducer.Dispatch(3, reductionGroupCount, 1, 1);
+            }
 
             // Final Min Reduce
+            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
             parallelReducer.SetBuffer(1, "_InputBuffer", reductionBuffer);
             parallelReducer.SetBuffer(1, "_OutputBuffer", predictedTransformBuffer);
             parallelReducer.Dispatch(1, 1, 1, 1);
+
+            // Reset
+            reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / 128);
 
             // Initial Max Reduce
             parallelReducer.SetBuffer(4, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
@@ -316,10 +327,18 @@ public class IteratedFunctionSystem : MonoBehaviour {
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(4, reductionGroupCount, 1, 1);
 
-            // Final Size
-            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+            while (reductionGroupCount > 128) {
+                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / 128);
+
+                // Global Max Reduce
+                parallelReducer.SetBuffer(4, "_InputBuffer", reductionBuffer);
+                parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
+                parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+                parallelReducer.Dispatch(4, reductionGroupCount, 1, 1);
+            }
 
             // Final Min Reduce
+            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
             parallelReducer.SetBuffer(2, "_InputBuffer", reductionBuffer);
             parallelReducer.SetBuffer(2, "_OutputBuffer", predictedTransformBuffer);
             parallelReducer.Dispatch(2, 1, 1, 1);
@@ -351,12 +370,19 @@ public class IteratedFunctionSystem : MonoBehaviour {
             Vector3[] meshPoints = new Vector3[lowDetailParticleCount];
             lowDetailMesh.GetVertexBuffer(0).GetData(meshPoints);
 
+            Vector3 cpuMin = Vector3.one * 1000000000;
+            Vector3 cpuMax = Vector3.one * -1000000000;
+
             for (int i = 0; i < meshPoints.Length; ++i) {
-                Debug.Log(meshPoints[i]);
+                cpuMin = Vector3.Min(cpuMin, meshPoints[i]);
+                cpuMax = Vector3.Max(cpuMax, meshPoints[i]);
             }
 
-            Debug.Log("Minimum: " + predictedPoints[0].ToString());
-            Debug.Log("Maximum: " + predictedPoints[1].ToString());
+            Debug.Log("Minimum Found By CPU: " + cpuMin.ToString());
+            Debug.Log("Maximum Found By CPU: " + cpuMax.ToString());
+
+            Debug.Log("Minimum Found By GPU: " + predictedPoints[0].ToString());
+            Debug.Log("Maximum Found By GPU: " + predictedPoints[1].ToString());
 
             dumpData = false;
         }
