@@ -32,8 +32,9 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
 
 #define INTERLEAVED_ADDRESSING_DIVERGENT 0
 #define INTERLEAVED_ADDRESSING_BANK_CONFLICT 1
+#define SEQUENTIAL_ADDRESSING 2
 
-#define REDUCTION_METHOD INTERLEAVED_ADDRESSING_BANK_CONFLICT
+#define REDUCTION_METHOD SEQUENTIAL_ADDRESSING
 
 groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE * 2];
 
@@ -55,9 +56,11 @@ float3 ReductionOperator(uint operation, float3 v1, float3 v2) {
     return 0;
 }
 
+// Reduction kernels and optimization progression referenced from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+
 void Reduce(uint operation, uint id, uint bufferSize) {
-    #if REDUCTION_METHOD == INTERLEAVED_ADDRESSING_DIVERGENT
-    for (uint s = 1; s < bufferSize; s *= 2) {
+    #if REDUCTION_METHOD == INTERLEAVED_ADDRESSING_DIVERGENT // Reduction #1 -- Slide 9 (PROBLEM: Divergent branch in loop)
+    for (uint s = 1; s < bufferSize; s *= 2) { 
         if (id % (2 * s) == 0) {
             float3 v = gs_Reduce[id];
             gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
@@ -65,7 +68,7 @@ void Reduce(uint operation, uint id, uint bufferSize) {
 
         GroupMemoryBarrierWithGroupSync();
     }
-    #elif REDUCTION_METHOD == INTERLEAVED_ADDRESSING_BANK_CONFLICT
+    #elif REDUCTION_METHOD == INTERLEAVED_ADDRESSING_BANK_CONFLICT // Reduction #2 -- Slide 11 (PROBLEM: Different threads reference the same shared memory index)
     for (uint s = 1; s < bufferSize; s *= 2) {
         uint index = 2 * s * id;
 
@@ -74,6 +77,14 @@ void Reduce(uint operation, uint id, uint bufferSize) {
             gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
         }
 
+        GroupMemoryBarrierWithGroupSync();
+    }
+    #elif REDUCTION_METHOD == SEQUENTIAL_ADDRESSING // Reduction #3 -- Slide 15 (PROBLEM: Half the threads of the warp are idle while the other half does work)
+    for (uint s = bufferSize / 2; s > 0; s >>= 1) {
+        if (id < s) {
+            float3 v = gs_Reduce[id];
+            gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
+        }
         GroupMemoryBarrierWithGroupSync();
     }
     #endif
