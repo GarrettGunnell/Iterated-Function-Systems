@@ -26,7 +26,7 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
 
 // Reduction kernels and optimization progression referenced from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
 
-#pragma multi_compile_local _ INTERLEAVED_ADDRESSING_DIVERGENT INTERLEAVED_ADDRESSING_BANK_CONFLICT SEQUENTIAL_ADDRESSING
+#pragma multi_compile_local _ INTERLEAVED_ADDRESSING_DIVERGENT INTERLEAVED_ADDRESSING_BANK_CONFLICT SEQUENTIAL_ADDRESSING UNROLL_LAST_WARP
 #pragma multi_compile_local _ DOUBLE_LOAD
 #pragma multi_compile_local _ MIN_REDUCTION MAX_REDUCTION
 
@@ -67,6 +67,7 @@ void Load(uint groupThreadID, uint globalThreadID, uint groupID, uint reductionB
 void Reduce(uint id, uint bufferSize) {
 #ifdef INTERLEAVED_ADDRESSING_DIVERGENT // Reduction #1 -- Slide 9 (PROBLEM: Divergent branch in loop)
     
+    [loop]
     for (uint s = 1; s < bufferSize; s *= 2) { 
         if (id % (2 * s) == 0) {
             float3 v = gs_Reduce[id];
@@ -79,6 +80,7 @@ void Reduce(uint id, uint bufferSize) {
 #endif
 #ifdef INTERLEAVED_ADDRESSING_BANK_CONFLICT // Reduction #2 -- Slide 11 (PROBLEM: Different threads reference the same shared memory index)
 
+    [loop]
     for (uint s = 1; s < bufferSize; s *= 2) {
         uint index = 2 * s * id;
 
@@ -91,9 +93,22 @@ void Reduce(uint id, uint bufferSize) {
     }
 
 #endif
-#ifdef SEQUENTIAL_ADDRESSING // Reduction #3 -- Slide 15 (PROBLEM: Half the threads of the warp are idle while the other half does work)
+#ifdef SEQUENTIAL_ADDRESSING // Reduction #3 -- Slide 15
 
-    for (uint s = bufferSize / 2; s > 0; s >>= 1) {
+    [loop]
+    for (uint s = bufferSize / 2; s > 0; s >>= 1) { // fyi s >>= 1 is equivalent to s /= 2
+        if (id < s) {
+            float3 v = gs_Reduce[id];
+            gs_Reduce[id] = ReductionOperator(v, gs_Reduce[id + s]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+#endif
+#ifdef UNROLL_LAST_WARP // Reduction #5 -- Slide 22
+
+    [unroll]
+    for (uint s = bufferSize / 2; s > 0; s >>= 1) { // fyi s >>= 1 is equivalent to s /= 2
         if (id < s) {
             float3 v = gs_Reduce[id];
             gs_Reduce[id] = ReductionOperator(v, gs_Reduce[id + s]);

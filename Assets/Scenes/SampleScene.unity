@@ -171,7 +171,7 @@ MonoBehaviour:
   pointCloudMeshes: []
   predictOrigin: 0
   boundsCalculationMode: 0
-  halfGroupCount: 1
+  toggleDoubleLoad: 1
   scalePadding: 1
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
@@ -202,7 +202,7 @@ MonoBehaviour:
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   parallelReducer: {fileID: 7200000, guid: 3285589765ffd20489593752acd50a05, type: 3}
   particlesPerBatch: 1048576
-  batchCount: 5
+  batchCount: 1
   updateInstanceCount: 0
   lowDetailParticleCount: 65536
   viewLowDetail: 0
@@ -217,15 +217,15 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   predictOrigin: 0
-  boundsCalculationMode: 1
-  halfGroupCount: 1
+  boundsCalculationMode: 4
+  toggleDoubleLoad: 1
   scalePadding: 1
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
   voxelSize: 0.02
   meshesToVoxelize: 11
-  useLowDetailForVoxels: 0
+  useLowDetailForVoxels: 1
   renderVoxels: 0
   dumpData: 0
   occlusionMultiplier: 1.66

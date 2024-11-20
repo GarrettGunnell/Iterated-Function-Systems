@@ -39,7 +39,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         SingleThreadedScan = 0,
         DivergentBranching,
         BankConflict,
-        SequentialAddressing
+        SequentialAddressing,
+        UnrollLastWarp
     }; public BoundsCalculationMode boundsCalculationMode;
     private BoundsCalculationMode cachedCalculationMode;
 
@@ -54,10 +55,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     private ComputeBuffer predictedTransformBuffer;
     private ComputeBuffer reductionBuffer;
-
-    private LocalKeyword divergentBranchKeyword, bankConflictKeyword, sequentialAddressingKeyword;
-    private LocalKeyword doubleLoadKeyword;
-    private LocalKeyword minKeyword, maxKeyword;
 
     private ComputeShader minReducer, maxReducer;
 
@@ -194,58 +191,49 @@ public class IteratedFunctionSystem : MonoBehaviour {
         int totalReductionGroups = Mathf.CeilToInt(lowDetailParticleCount / 128);
         reductionBuffer = new ComputeBuffer(totalReductionGroups, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
 
-        divergentBranchKeyword = new LocalKeyword(parallelReducer, "INTERLEAVED_ADDRESSING_DIVERGENT");
-        bankConflictKeyword = new LocalKeyword(parallelReducer, "INTERLEAVED_ADDRESSING_BANK_CONFLICT");
-        sequentialAddressingKeyword = new LocalKeyword(parallelReducer, "SEQUENTIAL_ADDRESSING");
-        doubleLoadKeyword = new LocalKeyword(parallelReducer, "DOUBLE_LOAD");
-        minKeyword = new LocalKeyword(parallelReducer, "MIN_REDUCTION");
-        maxKeyword = new LocalKeyword(parallelReducer, "MAX_REDUCTION");
-
         minReducer = Instantiate(parallelReducer);
-        minReducer.EnableKeyword("SEQUENTIAL_ADDRESSING");
-        minReducer.EnableKeyword("DOUBLE_LOAD");
         minReducer.EnableKeyword("MIN_REDUCTION");
         minReducer.DisableKeyword("MAX_REDUCTION");
 
         maxReducer = Instantiate(parallelReducer);
-        maxReducer.EnableKeyword("SEQUENTIAL_ADDRESSING");
-        maxReducer.EnableKeyword("DOUBLE_LOAD");
         maxReducer.EnableKeyword("MAX_REDUCTION");
         maxReducer.DisableKeyword("MIN_REDUCTION");
-
-        parallelReducer.DisableKeyword(minKeyword);
-        parallelReducer.EnableKeyword(maxKeyword);
     }
 
-    void EnableReductionKeyword(BoundsCalculationMode boundsMode) {
+    void EnableReductionKeyword(ComputeShader reducer, BoundsCalculationMode boundsMode) {
         if (boundsMode == BoundsCalculationMode.DivergentBranching)
-            parallelReducer.EnableKeyword(divergentBranchKeyword);
+            reducer.EnableKeyword("INTERLEAVED_ADDRESSING_DIVERGENT");
         if (boundsMode == BoundsCalculationMode.BankConflict)
-            parallelReducer.EnableKeyword(bankConflictKeyword);
+            reducer.EnableKeyword("INTERLEAVED_ADDRESSING_BANK_CONFLICT");
         if (boundsMode == BoundsCalculationMode.SequentialAddressing)
-            parallelReducer.EnableKeyword(sequentialAddressingKeyword);
+            reducer.EnableKeyword("SEQUENTIAL_ADDRESSING");
+        if (boundsMode == BoundsCalculationMode.UnrollLastWarp)
+            reducer.EnableKeyword("UNROLL_LAST_WARP");
     }
 
-    void DisableReductionKeywords() {
-        parallelReducer.DisableKeyword(divergentBranchKeyword);
-        parallelReducer.DisableKeyword(bankConflictKeyword);
-        parallelReducer.DisableKeyword(sequentialAddressingKeyword);
+    void DisableReductionKeywords(ComputeShader reducer) {
+        reducer.DisableKeyword("INTERLEAVED_ADDRESSING_DIVERGENT");
+        reducer.DisableKeyword("INTERLEAVED_ADDRESSING_BANK_CONFLICT");
+        reducer.DisableKeyword("SEQUENTIAL_ADDRESSING");
+        reducer.DisableKeyword("UNROLL_LAST_WARP");
     }
 
-    void UpdateReductionKeywords() {
-        DisableReductionKeywords();
-        EnableReductionKeyword(boundsCalculationMode);
+    void UpdateReductionKeywords(ComputeShader reducer) {
+        DisableReductionKeywords(reducer);
+        EnableReductionKeyword(reducer, boundsCalculationMode);
         cachedCalculationMode = boundsCalculationMode;
     }
 
     void ToggleDoubleLoad() {
         if (toggleDoubleLoad) {
-            if (parallelReducer.IsKeywordEnabled(doubleLoadKeyword)) {
-                parallelReducer.DisableKeyword(doubleLoadKeyword);
+            if (minReducer.IsKeywordEnabled("DOUBLE_LOAD")) {
+                minReducer.DisableKeyword("DOUBLE_LOAD");
+                maxReducer.DisableKeyword("DOUBLE_LOAD");
                 reductionGroupSize = 128;
                 Debug.Log("Disabled double load");
             } else {
-                parallelReducer.EnableKeyword(doubleLoadKeyword);
+                minReducer.EnableKeyword("DOUBLE_LOAD");
+                maxReducer.EnableKeyword("DOUBLE_LOAD");
                 reductionGroupSize = 256;
                 Debug.Log("Enabled double load");
             }
@@ -269,7 +257,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         InitializePredictedTransform();
 
         cachedCalculationMode = boundsCalculationMode;
-        UpdateReductionKeywords();
+        UpdateReductionKeywords(minReducer);
+        UpdateReductionKeywords(maxReducer);
         ToggleDoubleLoad();
     }
     
@@ -547,7 +536,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         }
 
         if (cachedCalculationMode != boundsCalculationMode) {
-            UpdateReductionKeywords();
+            UpdateReductionKeywords(minReducer);
+            UpdateReductionKeywords(maxReducer);
         }
 
         ToggleDoubleLoad();
