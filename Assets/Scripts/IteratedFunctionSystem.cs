@@ -37,10 +37,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     public enum BoundsCalculationMode {
         SingleThreadedScan = 0,
-        SingleGroupReduce
+        DivergentBranching,
+        BankConflict,
+        SequentialAddressing
     }; public BoundsCalculationMode boundsCalculationMode;
+    private BoundsCalculationMode cachedCalculationMode;
 
-    public bool halfGroupCount = true;
+    public bool toggleDoubleLoad = true;
 
     [Range(0.0f, 5.0f)]
     public float scalePadding = 1.0f;
@@ -51,6 +54,14 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     private ComputeBuffer predictedTransformBuffer;
     private ComputeBuffer reductionBuffer;
+
+    private LocalKeyword divergentBranchKeyword, bankConflictKeyword, sequentialAddressingKeyword;
+    private LocalKeyword doubleLoadKeyword;
+    private LocalKeyword minKeyword, maxKeyword;
+
+    private ComputeShader minReducer, maxReducer;
+
+    private int reductionGroupSize = 128;
 
     Vector3 newOrigin = Vector3.zero;
     float newScale = 1;
@@ -183,7 +194,63 @@ public class IteratedFunctionSystem : MonoBehaviour {
         int totalReductionGroups = Mathf.CeilToInt(lowDetailParticleCount / 128);
         reductionBuffer = new ComputeBuffer(totalReductionGroups, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
 
+        divergentBranchKeyword = new LocalKeyword(parallelReducer, "INTERLEAVED_ADDRESSING_DIVERGENT");
+        bankConflictKeyword = new LocalKeyword(parallelReducer, "INTERLEAVED_ADDRESSING_BANK_CONFLICT");
+        sequentialAddressingKeyword = new LocalKeyword(parallelReducer, "SEQUENTIAL_ADDRESSING");
+        doubleLoadKeyword = new LocalKeyword(parallelReducer, "DOUBLE_LOAD");
+        minKeyword = new LocalKeyword(parallelReducer, "MIN_REDUCTION");
+        maxKeyword = new LocalKeyword(parallelReducer, "MAX_REDUCTION");
 
+        minReducer = Instantiate(parallelReducer);
+        minReducer.EnableKeyword("SEQUENTIAL_ADDRESSING");
+        minReducer.EnableKeyword("DOUBLE_LOAD");
+        minReducer.EnableKeyword("MIN_REDUCTION");
+        minReducer.DisableKeyword("MAX_REDUCTION");
+
+        maxReducer = Instantiate(parallelReducer);
+        maxReducer.EnableKeyword("SEQUENTIAL_ADDRESSING");
+        maxReducer.EnableKeyword("DOUBLE_LOAD");
+        maxReducer.EnableKeyword("MAX_REDUCTION");
+        maxReducer.DisableKeyword("MIN_REDUCTION");
+
+        parallelReducer.DisableKeyword(minKeyword);
+        parallelReducer.EnableKeyword(maxKeyword);
+    }
+
+    void EnableReductionKeyword(BoundsCalculationMode boundsMode) {
+        if (boundsMode == BoundsCalculationMode.DivergentBranching)
+            parallelReducer.EnableKeyword(divergentBranchKeyword);
+        if (boundsMode == BoundsCalculationMode.BankConflict)
+            parallelReducer.EnableKeyword(bankConflictKeyword);
+        if (boundsMode == BoundsCalculationMode.SequentialAddressing)
+            parallelReducer.EnableKeyword(sequentialAddressingKeyword);
+    }
+
+    void DisableReductionKeywords() {
+        parallelReducer.DisableKeyword(divergentBranchKeyword);
+        parallelReducer.DisableKeyword(bankConflictKeyword);
+        parallelReducer.DisableKeyword(sequentialAddressingKeyword);
+    }
+
+    void UpdateReductionKeywords() {
+        DisableReductionKeywords();
+        EnableReductionKeyword(boundsCalculationMode);
+        cachedCalculationMode = boundsCalculationMode;
+    }
+
+    void ToggleDoubleLoad() {
+        if (toggleDoubleLoad) {
+            if (parallelReducer.IsKeywordEnabled(doubleLoadKeyword)) {
+                parallelReducer.DisableKeyword(doubleLoadKeyword);
+                reductionGroupSize = 128;
+                Debug.Log("Disabled double load");
+            } else {
+                parallelReducer.EnableKeyword(doubleLoadKeyword);
+                reductionGroupSize = 256;
+                Debug.Log("Enabled double load");
+            }
+            toggleDoubleLoad = false;
+        }
     }
 
 
@@ -200,6 +267,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
         InitializeRenderParams();
         InitializeVoxelGrid();
         InitializePredictedTransform();
+
+        cachedCalculationMode = boundsCalculationMode;
+        UpdateReductionKeywords();
+        ToggleDoubleLoad();
     }
     
     public virtual void IterateSystem() {
@@ -250,6 +321,33 @@ public class IteratedFunctionSystem : MonoBehaviour {
         return affineTransformations.GetFinalTransform();
     }
 
+    void Reduce(ComputeShader reducer) {
+        int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / reductionGroupSize);
+
+        // Initial Reduction (Mesh -> Reduction Buffer)
+        reducer.SetBuffer(1, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
+        reducer.SetBuffer(1, "_OutputBuffer", reductionBuffer);
+        reducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
+        reducer.Dispatch(1, reductionGroupCount, 1, 1);
+        
+        // Cross-kernel Reduction (Reduction Buffer -> Reduction Buffer)
+        while (reductionGroupCount > reductionGroupSize) {
+            reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / reductionGroupSize);
+
+            // Global Min Reduce
+            reducer.SetBuffer(1, "_InputBuffer", reductionBuffer);
+            reducer.SetBuffer(1, "_OutputBuffer", reductionBuffer);
+            reducer.SetInt("_ReductionBufferSize", reductionGroupCount);
+            reducer.Dispatch(1, reductionGroupCount, 1, 1);
+        }
+
+        // Final Reduction (Reduction Buffer -> Bounding Box Buffer)
+        reducer.SetInt("_ReductionBufferSize", Math.Min(128, reductionGroupCount));
+        reducer.SetBuffer(2, "_InputBuffer", reductionBuffer);
+        reducer.SetBuffer(2, "_OutputBuffer", predictedTransformBuffer);
+        reducer.Dispatch(2, 1, 1, 1);
+    }
+
     List<Vector3> gizmoPoints = new();
 
     public bool dumpData = false;
@@ -298,56 +396,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(0, 1, 1, 1);
         } else {
-            int reductionGroupSize = 128;
-
-            int reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / reductionGroupSize);
-
-            // Initial Min Reduce
-            parallelReducer.SetBuffer(3, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
-            parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
-            parallelReducer.Dispatch(3, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
-            
-            while (reductionGroupCount > reductionGroupSize) {
-                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / reductionGroupSize);
-
-                // Global Min Reduce
-                parallelReducer.SetBuffer(3, "_InputBuffer", reductionBuffer);
-                parallelReducer.SetBuffer(3, "_OutputBuffer", reductionBuffer);
-                parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-                parallelReducer.Dispatch(3, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
-            }
-
-            // Final Min Reduce
-            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-            parallelReducer.SetBuffer(1, "_InputBuffer", reductionBuffer);
-            parallelReducer.SetBuffer(1, "_OutputBuffer", predictedTransformBuffer);
-            parallelReducer.Dispatch(1, 1, 1, 1);
-
-            // Reset
-            reductionGroupCount = Mathf.CeilToInt(lowDetailParticleCount / reductionGroupSize);
-
-            // Initial Max Reduce
-            parallelReducer.SetBuffer(4, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
-            parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
-            parallelReducer.Dispatch(4, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
-
-            while (reductionGroupCount > reductionGroupSize) {
-                reductionGroupCount = Mathf.CeilToInt(reductionGroupCount / reductionGroupSize);
-
-                // Global Max Reduce
-                parallelReducer.SetBuffer(4, "_InputBuffer", reductionBuffer);
-                parallelReducer.SetBuffer(4, "_OutputBuffer", reductionBuffer);
-                parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-                parallelReducer.Dispatch(4, halfGroupCount ? reductionGroupCount / 2 : reductionGroupCount, 1, 1);
-            }
-
-            // Final Min Reduce
-            parallelReducer.SetInt("_ReductionBufferSize", reductionGroupCount);
-            parallelReducer.SetBuffer(2, "_InputBuffer", reductionBuffer);
-            parallelReducer.SetBuffer(2, "_OutputBuffer", predictedTransformBuffer);
-            parallelReducer.Dispatch(2, 1, 1, 1);
+            Reduce(minReducer);
+            Reduce(maxReducer);
         }
 
         gizmoPoints.Clear();
@@ -389,6 +439,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
             Debug.Log("Minimum Found By GPU: " + predictedPoints[0].ToString());
             Debug.Log("Maximum Found By GPU: " + predictedPoints[1].ToString());
+
+            foreach (var localKeyword in minReducer.enabledKeywords) {
+                Debug.Log("Local min shader keyword " + localKeyword.name + " is currently enabled");
+            }
+            foreach (var localKeyword in maxReducer.enabledKeywords) {
+                Debug.Log("Local max shader keyword " + localKeyword.name + " is currently enabled");
+            }
 
             dumpData = false;
         }
@@ -488,6 +545,12 @@ public class IteratedFunctionSystem : MonoBehaviour {
             Debug.Log("Particles in memory: " + (particlesPerBatch * batchCount).ToString());
             Debug.Log("Particles drawn with instancing: " + (particlesPerBatch * batchCount * instancedCommandIndexedData[0].instanceCount).ToString());
         }
+
+        if (cachedCalculationMode != boundsCalculationMode) {
+            UpdateReductionKeywords();
+        }
+
+        ToggleDoubleLoad();
 
         // Enable/Disable system iteration
         if (Input.GetKeyDown("r")) uncapped = !uncapped;

@@ -1,8 +1,6 @@
 #pragma kernel SingleThreadedScan
-#pragma kernel SingleGroupMinReduce
-#pragma kernel SingleGroupMaxReduce
-#pragma kernel MultiGroupMinReduce
-#pragma kernel MultiGroupMaxReduce
+#pragma kernel GlobalReduce
+#pragma kernel FinalReduce
 
 RWStructuredBuffer<float3> _OutputBuffer, _InputBuffer;
 uint _ReductionBufferSize;
@@ -25,125 +23,110 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
     }
 }
 
+
+// Reduction kernels and optimization progression referenced from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+
+#pragma multi_compile_local _ INTERLEAVED_ADDRESSING_DIVERGENT INTERLEAVED_ADDRESSING_BANK_CONFLICT SEQUENTIAL_ADDRESSING
+#pragma multi_compile_local _ DOUBLE_LOAD
+#pragma multi_compile_local _ MIN_REDUCTION MAX_REDUCTION
+
 #define REDUCTION_GROUP_SIZE 128
 
-#define MIN_REDUCTION 0
-#define MAX_REDUCTION 1
 
-#define INTERLEAVED_ADDRESSING_DIVERGENT 0
-#define INTERLEAVED_ADDRESSING_BANK_CONFLICT 1
-#define SEQUENTIAL_ADDRESSING 2
+groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE];
 
-#define REDUCTION_METHOD SEQUENTIAL_ADDRESSING
-
-#define SINGLE_LOAD 0
-#define DOUBLE_LOAD 1
-
-#define LOAD_METHOD DOUBLE_LOAD
-
-groupshared float3 gs_Reduce[REDUCTION_GROUP_SIZE * 2];
-
-float3 ReductionOperator(uint operation, float3 v1, float3 v2) {
-    if (operation == MIN_REDUCTION) {
+float3 ReductionOperator(float3 v1, float3 v2) {
+#ifdef MIN_REDUCTION
         return min(v1, v2);
-    } 
-    if (operation == MAX_REDUCTION) {
+#endif
+#ifdef MAX_REDUCTION
         return max(v1, v2);
-    }
+#endif
 
     return 0;
 }
 
+void Load(uint groupThreadID, uint globalThreadID, uint groupID, uint reductionBufferSize) {
+#ifdef DOUBLE_LOAD // Reduction #4 -- Slide 18
 
-// Reduction kernels and optimization progression referenced from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
-
-void Load(uint operation, uint groupThreadID, uint globalThreadID, uint groupID, uint reductionBufferSize) {
-    #if LOAD_METHOD == SINGLE_LOAD
-    gs_Reduce[groupThreadID] = _InputBuffer[globalThreadID];
-    #elif LOAD_METHOD == DOUBLE_LOAD // Reduction #4 -- Slide 18
     uint tid = groupThreadID;
     uint i = groupID * (reductionBufferSize * 2) + groupThreadID;
 
-    gs_Reduce[tid] = ReductionOperator(operation, _InputBuffer[i], _InputBuffer[i + reductionBufferSize]);
-    #endif
+    gs_Reduce[tid] = ReductionOperator(_InputBuffer[i], _InputBuffer[i + reductionBufferSize]);
+
+#else
+
+    gs_Reduce[groupThreadID] = _InputBuffer[globalThreadID];
+
+#endif
 
     AllMemoryBarrierWithGroupSync();
 
 }
 
-void Reduce(uint operation, uint id, uint bufferSize) {
-    #if REDUCTION_METHOD == INTERLEAVED_ADDRESSING_DIVERGENT // Reduction #1 -- Slide 9 (PROBLEM: Divergent branch in loop)
+void Reduce(uint id, uint bufferSize) {
+#ifdef INTERLEAVED_ADDRESSING_DIVERGENT // Reduction #1 -- Slide 9 (PROBLEM: Divergent branch in loop)
+    
     for (uint s = 1; s < bufferSize; s *= 2) { 
         if (id % (2 * s) == 0) {
             float3 v = gs_Reduce[id];
-            gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
+            gs_Reduce[id] = ReductionOperator(v, gs_Reduce[id + s]);
         }
 
         GroupMemoryBarrierWithGroupSync();
     }
-    #elif REDUCTION_METHOD == INTERLEAVED_ADDRESSING_BANK_CONFLICT // Reduction #2 -- Slide 11 (PROBLEM: Different threads reference the same shared memory index)
+
+#endif
+#ifdef INTERLEAVED_ADDRESSING_BANK_CONFLICT // Reduction #2 -- Slide 11 (PROBLEM: Different threads reference the same shared memory index)
+
     for (uint s = 1; s < bufferSize; s *= 2) {
         uint index = 2 * s * id;
 
         if (index < bufferSize) {
-            float3 v = gs_Reduce[id];
-            gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
+            float3 v = gs_Reduce[index];
+            gs_Reduce[index] = ReductionOperator(v, gs_Reduce[index + s]);
         }
 
         GroupMemoryBarrierWithGroupSync();
     }
-    #elif REDUCTION_METHOD == SEQUENTIAL_ADDRESSING // Reduction #3 -- Slide 15 (PROBLEM: Half the threads of the warp are idle while the other half does work)
+
+#endif
+#ifdef SEQUENTIAL_ADDRESSING // Reduction #3 -- Slide 15 (PROBLEM: Half the threads of the warp are idle while the other half does work)
+
     for (uint s = bufferSize / 2; s > 0; s >>= 1) {
         if (id < s) {
             float3 v = gs_Reduce[id];
-            gs_Reduce[id] = ReductionOperator(operation, v, gs_Reduce[id + s]);
+            gs_Reduce[id] = ReductionOperator(v, gs_Reduce[id + s]);
         }
         GroupMemoryBarrierWithGroupSync();
     }
-    #endif
+
+#endif
 }
 
+[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
+void GlobalReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
+    Load(gtid.x, id.x, gid.x, REDUCTION_GROUP_SIZE);
+
+    Reduce(gtid.x, REDUCTION_GROUP_SIZE);
+
+    if (gtid.x == 0) {
+        _OutputBuffer[gid.x] = gs_Reduce[0];
+    }
+}
 
 [numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
-void SingleGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(MIN_REDUCTION, id.x, id.x, gid.x, _ReductionBufferSize);
+void FinalReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
+    Load(id.x, id.x, gid.x, _ReductionBufferSize);
 
-    Reduce(MIN_REDUCTION, id.x, _ReductionBufferSize);
+    Reduce(id.x, _ReductionBufferSize);
 
     if (id.x == 0) {
+        #ifdef MIN_REDUCTION
         _OutputBuffer[0] = gs_Reduce[0];
-    }
-}
-
-[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
-void SingleGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(MAX_REDUCTION, id.x, id.x, gid.x, _ReductionBufferSize);
-
-    Reduce(MAX_REDUCTION, id.x, _ReductionBufferSize);
-
-    if (id.x == 0) {
+        #endif
+        #ifdef MAX_REDUCTION
         _OutputBuffer[1] = gs_Reduce[0];
-    }
-}
-
-[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
-void MultiGroupMinReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(MIN_REDUCTION, gtid.x, id.x, gid.x, REDUCTION_GROUP_SIZE);
-
-    Reduce(MIN_REDUCTION, gtid.x, REDUCTION_GROUP_SIZE);
-
-    if (gtid.x == 0) {
-        _OutputBuffer[gid.x] = gs_Reduce[0];
-    }
-}
-
-[numthreads(REDUCTION_GROUP_SIZE, 1, 1)]
-void MultiGroupMaxReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
-    Load(MAX_REDUCTION, gtid.x, id.x, gid.x, REDUCTION_GROUP_SIZE);
-
-    Reduce(MAX_REDUCTION, gtid.x, REDUCTION_GROUP_SIZE);
-
-    if (gtid.x == 0) {
-        _OutputBuffer[gid.x] = gs_Reduce[0];
+        #endif
     }
 }
