@@ -79,7 +79,7 @@ Shader "Custom/InstancedParticle" {
 				return v;
 			}
 
-			float4x4 _FinalTransform;
+			StructuredBuffer<float4x4> _FinalTransformBuffer;
 			float _OcclusionMultiplier, _OcclusionAttenuation;
 			float3 _ParticleColor, _OcclusionColor;
 			
@@ -99,8 +99,8 @@ Shader "Custom/InstancedParticle" {
 
 				// if (any(uint3(pos) > _GridSize) || any(pos < 0)) return;
 
-				float4 pos = mul(_FinalTransform, mul(_Transformations[instanceID], v.vertex));
-				// float4 pos = mul(_FinalTransform, v.vertex);
+				float4 pos = mul(_FinalTransformBuffer[0], mul(_Transformations[instanceID], v.vertex));
+				// float4 pos = mul(_FinalTransformBuffer[0], v.vertex);
 
 				float gridBounds = _GridBounds * 0.5f;
 

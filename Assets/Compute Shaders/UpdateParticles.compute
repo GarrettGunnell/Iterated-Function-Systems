@@ -60,7 +60,7 @@ void InitializeParticles(uint3 id : SV_DispatchThreadID) {
 
 uint _GridSize, _GridBounds;
 
-float4x4 _FinalTransform;
+StructuredBuffer<float4x4> _FinalTransformBuffer;
 
 [numthreads(64, 1, 1)] 
 void AffineTransformChaos(uint3 id : SV_DispatchThreadID) {
@@ -123,7 +123,9 @@ void ClearVoxelBuffer(uint3 id : SV_DispatchThreadID) {
 void VoxelizePositions(uint3 id : SV_DispatchThreadID) {
     float3 pos = ReadVertex(id.x);
 
-    float3 centralPos = mul(_FinalTransform, float4(pos, 1.0f)).xyz;
+    float4x4 finalTransform = _FinalTransformBuffer[0];
+
+    float3 centralPos = mul(finalTransform, float4(pos, 1.0f)).xyz;
     centralPos += (_GridBounds / 2.0f);
     centralPos /= _GridBounds;
     centralPos *= _GridSize;
@@ -131,7 +133,7 @@ void VoxelizePositions(uint3 id : SV_DispatchThreadID) {
     _VoxelGrid[to1D(centralPos)] = 1;
 
     for (uint i = 0; i < _TransformationCount; ++i) {
-        float3 nextPos = mul(_FinalTransform, mul(_Transformations[i], float4(pos, 1.0f))).xyz;
+        float3 nextPos = mul(finalTransform, mul(_Transformations[i], float4(pos, 1.0f))).xyz;
 
         nextPos += (_GridBounds / 2.0f);
         nextPos /= _GridBounds;

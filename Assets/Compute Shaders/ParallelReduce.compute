@@ -1,6 +1,7 @@
 #pragma kernel SingleThreadedScan
 #pragma kernel GlobalReduce
 #pragma kernel FinalReduce
+#pragma kernel ReductionToTransformation
 
 RWStructuredBuffer<float3> _OutputBuffer, _InputBuffer;
 uint _ReductionBufferSize;
@@ -144,4 +145,43 @@ void FinalReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, 
         _OutputBuffer[1] = gs_Reduce[0];
         #endif
     }
+}
+
+RWStructuredBuffer<float4x4> _FinalTransformBuffer;
+float _TargetBoundsSize, _ScalePadding;
+
+[numthreads(1, 1, 1)]
+void ReductionToTransformation(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
+    float3 minPos = _InputBuffer[0];
+    float3 maxPos = _InputBuffer[1];
+
+    float3 midPos = lerp(minPos, maxPos, 0.5f);
+
+    float x = abs(minPos.x - maxPos.x);
+    float y = abs(minPos.y - maxPos.y);
+    float z = abs(minPos.z - maxPos.z);
+
+    float boundsExtent = distance(minPos, maxPos);
+    // float boundsExtent = max(x, max(y, z));
+
+    float rescale = _TargetBoundsSize / boundsExtent;
+    rescale *= _ScalePadding;
+
+    midPos *= rescale;
+
+    float4x4 finalTransform = {
+        rescale, 0.0f, 0.0f, -midPos.x,
+        0.0f, rescale, 0.0f, -midPos.y,
+        0.0f, 0.0f, rescale, -midPos.z,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+
+    // float4x4 finalTransform = {
+    //     1.0f, 0.0f, 0.0f, 0.0f,
+    //     0.0f, 1.0f, 0.0f, 0.0f,
+    //     0.0f, 0.0f, 1.0f, 0.0f,
+    //     0.0f, 0.0f, 0.0f, 1.0f
+    // };
+
+    _FinalTransformBuffer[0] = finalTransform;
 }

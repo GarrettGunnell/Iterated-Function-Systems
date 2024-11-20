@@ -32,7 +32,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
     [NonSerialized]
     public int threadsPerGroup = 64;
 
-    
     public bool predictOrigin = false;
 
     public enum BoundsCalculationMode {
@@ -49,11 +48,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
     [Range(0.0f, 5.0f)]
     public float scalePadding = 1.0f;
 
-    
     GraphicsBuffer instancedCommandBuffer, lowDetailCommandBuffer;
     GraphicsBuffer.IndirectDrawIndexedArgs[] instancedCommandIndexedData;
 
-    private ComputeBuffer predictedTransformBuffer;
+    private ComputeBuffer reductionDataBuffer, finalTransformBuffer;
     private ComputeBuffer reductionBuffer;
 
     private ComputeShader minReducer, maxReducer;
@@ -163,8 +161,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
     }
 
     void InitializePredictedTransform() {
-        predictedTransformBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
-
+        reductionDataBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
+        finalTransformBuffer = new ComputeBuffer(1, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Matrix4x4)));
         
         lowDetailMesh = new Mesh();
 
@@ -333,13 +331,14 @@ public class IteratedFunctionSystem : MonoBehaviour {
         // Final Reduction (Reduction Buffer -> Bounding Box Buffer)
         reducer.SetInt("_ReductionBufferSize", Math.Min(128, reductionGroupCount));
         reducer.SetBuffer(2, "_InputBuffer", reductionBuffer);
-        reducer.SetBuffer(2, "_OutputBuffer", predictedTransformBuffer);
+        reducer.SetBuffer(2, "_OutputBuffer", reductionDataBuffer);
         reducer.Dispatch(2, 1, 1, 1);
     }
 
     List<Vector3> gizmoPoints = new();
 
     public bool dumpData = false;
+    public bool updateGizmoPoints = false;
     void PredictFinalTransform() {
         // Reset System
         int cubeRootParticleCount = Mathf.CeilToInt(Mathf.Pow(lowDetailParticleCount, 1.0f / 3.0f));
@@ -381,7 +380,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
         if (boundsCalculationMode == BoundsCalculationMode.SingleThreadedScan) {
             parallelReducer.SetBuffer(0, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
-            parallelReducer.SetBuffer(0, "_OutputBuffer", predictedTransformBuffer);
+            parallelReducer.SetBuffer(0, "_OutputBuffer", reductionDataBuffer);
             parallelReducer.SetInt("_ReductionBufferSize", (int)lowDetailParticleCount);
             parallelReducer.Dispatch(0, 1, 1, 1);
         } else {
@@ -389,29 +388,41 @@ public class IteratedFunctionSystem : MonoBehaviour {
             Reduce(maxReducer);
         }
 
-        gizmoPoints.Clear();
-        Vector3[] predictedPoints = new Vector3[3];
+        parallelReducer.SetBuffer(3, "_InputBuffer", reductionDataBuffer);
+        parallelReducer.SetBuffer(3, "_FinalTransformBuffer", finalTransformBuffer);
+        parallelReducer.SetFloat("_TargetBoundsSize", voxelBounds);
+        parallelReducer.SetFloat("_ScalePadding", scalePadding);
+        parallelReducer.Dispatch(3, 1, 1, 1);
 
-        predictedTransformBuffer.GetData(predictedPoints);
+        if (updateGizmoPoints) {
+            gizmoPoints.Clear();
+            Vector3[] predictedPoints = new Vector3[3];
 
-        for (int i = 0; i < 2; ++i) {
-            gizmoPoints.Add(new Vector3(predictedPoints[i].x, predictedPoints[i].y, predictedPoints[i].z));
+            reductionDataBuffer.GetData(predictedPoints);
+
+            for (int i = 0; i < 2; ++i) {
+                gizmoPoints.Add(new Vector3(predictedPoints[i].x, predictedPoints[i].y, predictedPoints[i].z));
+            }
+
+            Vector3 p1 = gizmoPoints[0];
+            Vector3 p2 = gizmoPoints[1];
+        
+            float x = Mathf.Abs(p1.x - p2.x);
+            float y = Mathf.Abs(p1.y - p2.y);
+            float z = Mathf.Abs(p1.z - p2.z);
+
+            newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
+            newOrigin = Vector3.Lerp(p1, p2, 0.5f);
+            newScale = Mathf.Max(x, Mathf.Max(y, z));
+            // newScale = Vector3.Distance(p1, p2);
+            newScale *= scalePadding;
         }
 
-        Vector3 p1 = gizmoPoints[0];
-        Vector3 p2 = gizmoPoints[1];
-    
-        float x = Mathf.Abs(p1.x - p2.x);
-        float y = Mathf.Abs(p1.y - p2.y);
-        float z = Mathf.Abs(p1.z - p2.z);
-
-        newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
-        newOrigin = Vector3.Lerp(p1, p2, 0.5f);
-        newScale = Mathf.Max(x, Mathf.Max(y, z));
-        // newScale = Vector3.Distance(p1, p2);
-        newScale *= scalePadding;
-
         if (dumpData) {
+            Vector3[] predictedPoints = new Vector3[3];
+
+            reductionDataBuffer.GetData(predictedPoints);
+
             Vector3[] meshPoints = new Vector3[lowDetailParticleCount];
             lowDetailMesh.GetVertexBuffer(0).GetData(meshPoints);
 
@@ -465,7 +476,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         // Particles To Voxel (Brute Force)
         particleUpdater.SetInt("_GridSize", Mathf.FloorToInt(voxelBounds / voxelSize));
         particleUpdater.SetInt("_GridBounds", voxelBounds);
-        particleUpdater.SetMatrix("_FinalTransform", GetFinalFinalTransform());
+        particleUpdater.SetBuffer(4, "_FinalTransformBuffer", finalTransformBuffer);
         particleUpdater.SetInt("_TransformationCount", affineTransformations.GetTransformCount());
         
         if (useLowDetailForVoxels) {
@@ -509,7 +520,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         instancedRenderParams.matProps.SetFloat("_OcclusionAttenuation", occlusionAttenuation);
         instancedRenderParams.matProps.SetVector("_ParticleColor", particleColor);
         instancedRenderParams.matProps.SetVector("_OcclusionColor", occlusionColor);
-        instancedRenderParams.matProps.SetMatrix("_FinalTransform", GetFinalFinalTransform());
+        instancedRenderParams.matProps.SetBuffer("_FinalTransformBuffer", finalTransformBuffer);
         instancedRenderParams.matProps.SetBuffer("_Transformations", affineTransformations.GetAffineBuffer());
 
         if (viewLowDetail) {
@@ -576,7 +587,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
         lowDetailCommandBuffer.Release();
         voxelGrid.Release();
         occlusionGrid.Release();
-        predictedTransformBuffer.Release();
+        reductionDataBuffer.Release();
+        finalTransformBuffer.Release();
     }
 
     void OnDrawGizmos() {
@@ -584,16 +596,16 @@ public class IteratedFunctionSystem : MonoBehaviour {
         Gizmos.color = Color.red;
         Gizmos.DrawWireCube(Vector3.zero, Vector3.one * voxelBounds);
 
-        // CPU Side IFS
-        Gizmos.color = Color.yellow;
-        for (int i = 0; i < gizmoPoints.Count; ++i) Gizmos.DrawSphere(gizmoPoints[i], 0.025f);
+        if (updateGizmoPoints) {
+            Gizmos.color = Color.yellow;
+            for (int i = 0; i < gizmoPoints.Count; ++i) Gizmos.DrawSphere(gizmoPoints[i], 0.025f);
 
-        if (gizmoPoints.Count > 0) {
+            if (gizmoPoints.Count > 0) {
+            Gizmos.color = Color.green;
+            Gizmos.DrawSphere(newOrigin, 0.025f);
 
-        Gizmos.color = Color.green;
-        Gizmos.DrawSphere(newOrigin, 0.025f);
-
-        Gizmos.DrawWireCube(newOrigin, Vector3.one * newScale);
+            Gizmos.DrawWireCube(newOrigin, Vector3.one * newScale);
+            }
         }
     }
 }
