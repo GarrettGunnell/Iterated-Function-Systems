@@ -56,7 +56,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
     private ComputeBuffer reductionDataBuffer, finalTransformBuffer;
     private ComputeBuffer reductionBuffer;
 
-    private ComputeShader minReducer, maxReducer;
+    private ComputeShader minReducer, maxReducer, addReducer;
 
     private int reductionGroupSize = 128;
 
@@ -202,10 +202,18 @@ public class IteratedFunctionSystem : MonoBehaviour {
         minReducer = Instantiate(parallelReducer);
         minReducer.EnableKeyword("MIN_REDUCTION");
         minReducer.DisableKeyword("MAX_REDUCTION");
+        minReducer.DisableKeyword("ADD_REDUCTION");
 
         maxReducer = Instantiate(parallelReducer);
         maxReducer.EnableKeyword("MAX_REDUCTION");
         maxReducer.DisableKeyword("MIN_REDUCTION");
+        maxReducer.DisableKeyword("ADD_REDUCTION");
+
+        addReducer = Instantiate(parallelReducer);
+        addReducer.DisableKeyword("MAX_REDUCTION");
+        addReducer.DisableKeyword("MIN_REDUCTION");
+        addReducer.EnableKeyword("ADD_REDUCTION");
+
     }
 
     void EnableReductionKeyword(ComputeShader reducer, BoundsCalculationMode boundsMode) {
@@ -237,11 +245,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
             if (minReducer.IsKeywordEnabled("DOUBLE_LOAD")) {
                 minReducer.DisableKeyword("DOUBLE_LOAD");
                 maxReducer.DisableKeyword("DOUBLE_LOAD");
+                addReducer.DisableKeyword("DOUBLE_LOAD");
                 reductionGroupSize = 128;
                 Debug.Log("Disabled double load");
             } else {
                 minReducer.EnableKeyword("DOUBLE_LOAD");
                 maxReducer.EnableKeyword("DOUBLE_LOAD");
+                addReducer.EnableKeyword("DOUBLE_LOAD");
                 reductionGroupSize = 256;
                 Debug.Log("Enabled double load");
             }
@@ -271,6 +281,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
             cachedCalculationMode = boundsCalculationMode;
             UpdateReductionKeywords(minReducer);
             UpdateReductionKeywords(maxReducer);
+            UpdateReductionKeywords(addReducer);
             ToggleDoubleLoad();
 
             buffersInitialized = true;
@@ -391,12 +402,14 @@ public class IteratedFunctionSystem : MonoBehaviour {
         } else {
             Reduce(minReducer);
             Reduce(maxReducer);
+            Reduce(addReducer);
         }
 
         parallelReducer.SetBuffer(3, "_InputBuffer", reductionDataBuffer);
         parallelReducer.SetBuffer(3, "_FinalTransformBuffer", finalTransformBuffer);
         parallelReducer.SetFloat("_TargetBoundsSize", voxelBounds);
         parallelReducer.SetFloat("_ScalePadding", scalePadding);
+        parallelReducer.SetFloat("_ParticleCount", lowDetailParticleCount);
         parallelReducer.Dispatch(3, 1, 1, 1);
 
         if (updateGizmoPoints) {
@@ -405,12 +418,13 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
             reductionDataBuffer.GetData(predictedPoints);
 
-            for (int i = 0; i < 2; ++i) {
+            for (int i = 0; i < 3; ++i) {
                 gizmoPoints.Add(new Vector3(predictedPoints[i].x, predictedPoints[i].y, predictedPoints[i].z));
             }
 
             Vector3 p1 = gizmoPoints[0];
             Vector3 p2 = gizmoPoints[1];
+            Vector3 p3 = gizmoPoints[2];
         
             float x = Mathf.Abs(p1.x - p2.x);
             float y = Mathf.Abs(p1.y - p2.y);
@@ -418,7 +432,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
             newOrigin = new Vector3(predictedPoints[2].x, predictedPoints[2].y, predictedPoints[2].z);
             newOrigin = Vector3.Lerp(p1, p2, 0.5f);
-            newScale = Mathf.Max(x, Mathf.Max(y, z));
+            newOrigin = p3 / lowDetailParticleCount;
+            newScale = Mathf.Max(Vector3.Distance(p1, newOrigin), Vector3.Distance(p2, newOrigin));
             // newScale = Vector3.Distance(p1, p2);
             newScale *= scalePadding;
         }
@@ -433,23 +448,30 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
             Vector3 cpuMin = Vector3.one * 1000000000;
             Vector3 cpuMax = Vector3.one * -1000000000;
+            Vector3 cpuAdd = Vector3.zero;
 
             for (int i = 0; i < meshPoints.Length; ++i) {
                 cpuMin = Vector3.Min(cpuMin, meshPoints[i]);
                 cpuMax = Vector3.Max(cpuMax, meshPoints[i]);
+                cpuAdd += meshPoints[i];
             }
 
             Debug.Log("Minimum Found By CPU: " + cpuMin.ToString());
             Debug.Log("Maximum Found By CPU: " + cpuMax.ToString());
+            Debug.Log("Sum Found By CPU: " + cpuAdd.ToString());
 
             Debug.Log("Minimum Found By GPU: " + predictedPoints[0].ToString());
             Debug.Log("Maximum Found By GPU: " + predictedPoints[1].ToString());
+            Debug.Log("Sum Found By GPU: " + predictedPoints[2].ToString());
 
             foreach (var localKeyword in minReducer.enabledKeywords) {
                 Debug.Log("Local min shader keyword " + localKeyword.name + " is currently enabled");
             }
             foreach (var localKeyword in maxReducer.enabledKeywords) {
                 Debug.Log("Local max shader keyword " + localKeyword.name + " is currently enabled");
+            }
+            foreach (var localKeyword in addReducer.enabledKeywords) {
+                Debug.Log("Local add shader keyword " + localKeyword.name + " is currently enabled");
             }
 
             dumpData = false;
@@ -550,6 +572,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
             cachedCalculationMode = boundsCalculationMode;
             UpdateReductionKeywords(minReducer);
             UpdateReductionKeywords(maxReducer);
+            UpdateReductionKeywords(addReducer);
             ToggleDoubleLoad();
 
             buffersInitialized = true;
@@ -574,6 +597,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         if (cachedCalculationMode != boundsCalculationMode) {
             UpdateReductionKeywords(minReducer);
             UpdateReductionKeywords(maxReducer);
+            UpdateReductionKeywords(addReducer);
         }
 
         ToggleDoubleLoad();

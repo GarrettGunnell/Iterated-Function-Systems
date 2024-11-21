@@ -165,7 +165,7 @@ MonoBehaviour:
   particlesPerBatch: 1048576
   batchCount: 1
   updateInstanceCount: 0
-  lowDetailParticleCount: 64
+  lowDetailGenerations: 8
   viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes: []
@@ -181,6 +181,7 @@ MonoBehaviour:
   useLowDetailForVoxels: 0
   renderVoxels: 0
   dumpData: 0
+  updateGizmoPoints: 0
   occlusionMultiplier: 1
   occlusionAttenuation: 1
   particleColor: {r: 0.8537736, g: 1, b: 0.8947165, a: 0}
@@ -202,9 +203,9 @@ MonoBehaviour:
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
   parallelReducer: {fileID: 7200000, guid: 3285589765ffd20489593752acd50a05, type: 3}
   particlesPerBatch: 1048576
-  batchCount: 1
+  batchCount: 10
   updateInstanceCount: 0
-  lowDetailParticleCount: 65536
+  lowDetailGenerations: 21
   viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes:
@@ -223,11 +224,12 @@ MonoBehaviour:
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
-  voxelSize: 0.02
+  voxelSize: 0.01
   meshesToVoxelize: 11
-  useLowDetailForVoxels: 1
+  useLowDetailForVoxels: 0
   renderVoxels: 0
   dumpData: 0
+  updateGizmoPoints: 1
   occlusionMultiplier: 1.66
   occlusionAttenuation: 1.42
   particleColor: {r: 0.764151, g: 0.5655022, b: 0.4793966, a: 0}
@@ -330,7 +332,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affinePreset: 6
-  randomInstructionCount: 5
+  randomInstructionCount: 2
   resetToPreset: 0
   transformSet:
   - scale: {x: 0.7114281, y: 0.42056277, z: 0.62311846}
@@ -345,24 +347,6 @@ MonoBehaviour:
     shearZ: {x: -0.18165894, y: 0.10299754, z: 0}
     rotate: {x: 2.5488434, y: -5.270279, z: 23.032948}
     translate: {x: -0.4056494, y: -0.5833988, z: -0.5100738}
-  - scale: {x: 0.6193025, y: 0.51646733, z: 0.481933}
-    shearX: {x: 0, y: -0.024786204, z: 0.12335033}
-    shearY: {x: -0.19764544, y: 0, z: -0.13311148}
-    shearZ: {x: -0.08607651, y: 0.006784275, z: 0}
-    rotate: {x: -33.442257, y: 23.618523, z: 11.98255}
-    translate: {x: 0.5506843, y: -0.5867704, z: 0.46513462}
-  - scale: {x: 0.66183966, y: 0.44249377, z: 0.70795006}
-    shearX: {x: 0, y: 0.04330027, z: -0.11857115}
-    shearY: {x: -0.064619996, y: 0, z: 0.075749636}
-    shearZ: {x: 0.17336072, y: -0.010457113, z: 0}
-    rotate: {x: 6.230217, y: -5.521057, z: 16.931213}
-    translate: {x: 0.44560653, y: -0.56083655, z: -0.5905498}
-  - scale: {x: 0.556013, y: 0.7412237, z: 0.59991807}
-    shearX: {x: 0, y: 0.12247361, z: -0.03462693}
-    shearY: {x: 0.10615577, y: 0, z: -0.03963363}
-    shearZ: {x: -0.035403416, y: -0.058462217, z: 0}
-    rotate: {x: -10.179836, y: -3.0447521, z: 12.539845}
-    translate: {x: -0.09771822, y: 0.43478978, z: -0.014900461}
   postTransform:
     scale: {x: 1, y: 1, z: 1}
     shearX: {x: 0, y: 0, z: 0}
@@ -383,7 +367,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affinePreset: 6
-  randomInstructionCount: 5
+  randomInstructionCount: 2
   resetToPreset: 0
   transformSet:
   - scale: {x: 0.64567, y: 0.6520087, z: 0.4992622}
@@ -398,24 +382,6 @@ MonoBehaviour:
     shearZ: {x: -0.06789043, y: 0.14539348, z: 0}
     rotate: {x: -13.756258, y: -10.734333, z: -26.906143}
     translate: {x: -0.46300432, y: -0.44532868, z: -0.5514636}
-  - scale: {x: 0.7428514, y: 0.47140563, z: 0.46336603}
-    shearX: {x: 0, y: -0.04920852, z: 0.1676774}
-    shearY: {x: 0.08905138, y: 0, z: -0.0030246526}
-    shearZ: {x: -0.09206117, y: -0.014424726, z: 0}
-    rotate: {x: -26.806797, y: -0.17085457, z: -9.783718}
-    translate: {x: 0.5547283, y: -0.48630834, z: 0.5808977}
-  - scale: {x: 0.4813061, y: 0.6156778, z: 0.6094203}
-    shearX: {x: 0, y: -0.09350674, z: -0.0023040473}
-    shearY: {x: 0.07045521, y: 0, z: -0.14497377}
-    shearZ: {x: -0.02358672, y: 0.102892965, z: 0}
-    rotate: {x: 35.47342, y: -11.926687, z: 12.479841}
-    translate: {x: 0.5952646, y: -0.48248553, z: -0.41280264}
-  - scale: {x: 0.47175708, y: 0.5403718, z: 0.5383773}
-    shearX: {x: 0, y: 0.096911, z: 0.19146086}
-    shearY: {x: 0.08770055, y: 0, z: 0.067240335}
-    shearZ: {x: -0.103575036, y: -0.12525545, z: 0}
-    rotate: {x: 33.294918, y: 2.8480797, z: 24.161963}
-    translate: {x: -0.08420005, y: 0.28228307, z: 0.02739415}
   postTransform:
     scale: {x: 1, y: 1, z: 1}
     shearX: {x: 0, y: 0, z: 0}
@@ -435,19 +401,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e736e87fafb0554f9f37774f5cef63f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scaleMin: {x: 0.4, y: 0.4, z: 0.4}
+  scaleMin: {x: 0.85, y: 0.85, z: 0.85}
   scaleMax: {x: 0.75, y: 0.75, z: 0.75}
-  shearXMin: {x: 0, y: -0.2, z: -0.2}
-  shearXMax: {x: 0, y: 0.2, z: 0.2}
-  shearYMin: {x: -0.2, y: 0, z: -0.2}
-  shearYMax: {x: 0.2, y: 0, z: 0.2}
-  shearZMin: {x: -0.2, y: -0.2, z: 0}
-  shearZMax: {x: 0.2, y: 0.2, z: 0}
-  rotateMin: {x: -34.78, y: -30.51, z: -31.49}
+  shearXMin: {x: 0, y: -0.1, z: -0.1}
+  shearXMax: {x: 0, y: 0.1, z: 0.1}
+  shearYMin: {x: -0.1, y: 0, z: -0.1}
+  shearYMax: {x: 0.1, y: 0, z: 0.1}
+  shearZMin: {x: -0.1, y: -0.1, z: 0}
+  shearZMax: {x: 0.1, y: 0.1, z: 0}
+  rotateMin: {x: -40, y: -40, z: -40}
   rotateMax: {x: 40, y: 40, z: 40}
-  translateMin: {x: -0.1, y: -0.1, z: -0.1}
-  translateMax: {x: 0.1, y: 0.1, z: 0.1}
-  translationTemplate: 3
+  translateMin: {x: 0, y: 0, z: 0}
+  translateMax: {x: 1, y: 1, z: 1}
+  translationTemplate: 6
 --- !u!4 &198840501
 Transform:
   m_ObjectHideFlags: 0
@@ -475,10 +441,10 @@ GameObject:
   - component: {fileID: 993136283}
   - component: {fileID: 993136282}
   - component: {fileID: 993136281}
-  - component: {fileID: 993136280}
-  - component: {fileID: 993136279}
   - component: {fileID: 993136278}
+  - component: {fileID: 993136279}
   - component: {fileID: 993136277}
+  - component: {fileID: 993136280}
   - component: {fileID: 993136276}
   - component: {fileID: 993136285}
   m_Layer: 0
@@ -669,8 +635,8 @@ Camera:
   near clip plane: 0.01
   far clip plane: 1000
   field of view: 60
-  orthographic: 0
-  orthographic size: 0.67
+  orthographic: 1
+  orthographic size: 1.5
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2

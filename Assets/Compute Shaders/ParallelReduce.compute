@@ -32,7 +32,7 @@ void SingleThreadedScan(uint3 id : SV_DISPATCHTHREADID) {
 
 #pragma multi_compile_local _ INTERLEAVED_ADDRESSING_DIVERGENT INTERLEAVED_ADDRESSING_BANK_CONFLICT SEQUENTIAL_ADDRESSING UNROLL_LAST_WARP
 #pragma multi_compile_local _ DOUBLE_LOAD
-#pragma multi_compile_local _ MIN_REDUCTION MAX_REDUCTION
+#pragma multi_compile_local _ MIN_REDUCTION MAX_REDUCTION ADD_REDUCTION
 
 #define REDUCTION_GROUP_SIZE 128
 
@@ -45,6 +45,9 @@ float3 ReductionOperator(float3 v1, float3 v2) {
 #endif
 #ifdef MAX_REDUCTION
         return max(v1, v2);
+#endif
+#ifdef ADD_REDUCTION
+    return v1 + v2;
 #endif
 
     return 0;
@@ -147,24 +150,27 @@ void FinalReduce(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, 
         #ifdef MAX_REDUCTION
         _OutputBuffer[1] = gs_Reduce[0];
         #endif
+        #ifdef ADD_REDUCTION
+        _OutputBuffer[2] = gs_Reduce[0];
+        #endif
     }
 }
 
 RWStructuredBuffer<float4x4> _FinalTransformBuffer;
-float _TargetBoundsSize, _ScalePadding;
+float _TargetBoundsSize, _ScalePadding, _ParticleCount;
 
 [numthreads(1, 1, 1)]
 void ReductionToTransformation(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GROUPID) {
     float3 minPos = _InputBuffer[0];
     float3 maxPos = _InputBuffer[1];
 
-    float3 midPos = lerp(minPos, maxPos, 0.5f);
+    float3 midPos = _InputBuffer[2] / _ParticleCount;
 
     float x = abs(minPos.x - maxPos.x);
     float y = abs(minPos.y - maxPos.y);
     float z = abs(minPos.z - maxPos.z);
 
-    float boundsExtent = distance(minPos, maxPos);
+    float boundsExtent = max(distance(minPos, midPos), distance(maxPos, midPos));
     // float boundsExtent = max(x, max(y, z));
 
     float rescale = _TargetBoundsSize / boundsExtent;
