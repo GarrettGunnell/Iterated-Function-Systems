@@ -16,7 +16,8 @@ public class IteratedFunctionSystem : MonoBehaviour {
     public uint batchCount = 1;
     public bool updateInstanceCount = true;
 
-    public uint lowDetailParticleCount = 64;
+    public uint lowDetailGenerations = 8;
+    private uint lowDetailParticleCount = 0;
 
     public bool viewLowDetail = false;
 
@@ -51,6 +52,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
     GraphicsBuffer instancedCommandBuffer, lowDetailCommandBuffer;
     GraphicsBuffer.IndirectDrawIndexedArgs[] instancedCommandIndexedData;
 
+    private ComputeBuffer[] lowDetailIterationBuffers;
     private ComputeBuffer reductionDataBuffer, finalTransformBuffer;
     private ComputeBuffer reductionBuffer;
 
@@ -58,8 +60,10 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
     private int reductionGroupSize = 128;
 
-    Vector3 newOrigin = Vector3.zero;
-    float newScale = 1;
+    private float newScale;
+    private Vector3 newOrigin;
+
+    private bool buffersInitialized = false;
 
     void InitializeRenderParams() {
         instancedRenderParams = new RenderParams(instancedPointMaterial);
@@ -74,7 +78,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         instancedCommandBuffer.SetData(instancedCommandIndexedData);
 
         lowDetailCommandBuffer = new GraphicsBuffer(GraphicsBuffer.Target.IndirectArguments, 1, GraphicsBuffer.IndirectDrawIndexedArgs.size);
-        instancedCommandIndexedData[0].indexCountPerInstance = particlesPerBatch;
+        instancedCommandIndexedData[0].indexCountPerInstance = lowDetailParticleCount;
 
         lowDetailCommandBuffer.SetData(instancedCommandIndexedData);
     }
@@ -163,7 +167,22 @@ public class IteratedFunctionSystem : MonoBehaviour {
     void InitializePredictedTransform() {
         reductionDataBuffer = new ComputeBuffer(3, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
         finalTransformBuffer = new ComputeBuffer(1, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Matrix4x4)));
+
+        lowDetailParticleCount = (uint)Mathf.CeilToInt(Mathf.Pow(affineTransformations.GetTransformCount(), lowDetailGenerations));
+        Debug.Log("Transform Count: " + affineTransformations.GetTransformCount().ToString());
+        Debug.Log("Particle Count: " + lowDetailParticleCount.ToString());
+        lowDetailIterationBuffers = new ComputeBuffer[lowDetailGenerations - 1];
+
+        for (int i = 0; i < lowDetailGenerations - 1; ++i) {
+            int bufferSize = Mathf.CeilToInt(Mathf.Pow(affineTransformations.GetTransformCount(), i + 1));
+
+            Debug.Log("Buffer " + i.ToString() + ": " + bufferSize.ToString());
+
+            lowDetailIterationBuffers[i] = new ComputeBuffer(bufferSize, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
+        }
         
+        Debug.Log("Low Detail Vertices: " + lowDetailParticleCount.ToString());
+
         lowDetailMesh = new Mesh();
 
         lowDetailMesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw;
@@ -176,15 +195,6 @@ public class IteratedFunctionSystem : MonoBehaviour {
 
         lowDetailMesh.SetSubMesh(0, new SubMeshDescriptor(0, (int)lowDetailParticleCount, MeshTopology.Points), MeshUpdateFlags.DontRecalculateBounds);
 
-        // Initialize point cloud vertices
-        int cubeRootParticleCount = Mathf.CeilToInt(Mathf.Pow(lowDetailParticleCount, 1.0f / 3.0f));
-        particleUpdater.SetInt("_CubeResolution", cubeRootParticleCount);
-        particleUpdater.SetFloat("_CubeSize", 1.0f / cubeRootParticleCount);
-        particleUpdater.SetInt("_ParticleCount", (int)lowDetailParticleCount);
-
-        particleUpdater.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-        particleUpdater.SetBuffer(0, "_IndexBuffer", lowDetailMesh.GetIndexBuffer());
-        particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
 
         int totalReductionGroups = Mathf.CeilToInt(lowDetailParticleCount / 128);
         reductionBuffer = new ComputeBuffer(totalReductionGroups, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
@@ -243,21 +253,28 @@ public class IteratedFunctionSystem : MonoBehaviour {
     void OnEnable() {
         // Debug.Log(SystemInfo.graphicsDeviceName);
 
+        buffersInitialized = false;
+
         Application.targetFrameRate = 120;
 
         UnsafeUtility.SetLeakDetectionMode(Unity.Collections.NativeLeakDetectionMode.Enabled);
         instancedPointMaterial = new Material(instancedPointShader);
 
-        
-        InitializeMeshes();
-        InitializeRenderParams();
-        InitializeVoxelGrid();
-        InitializePredictedTransform();
+        if (affineTransformations.GetTransformCount() != 0) {
 
-        cachedCalculationMode = boundsCalculationMode;
-        UpdateReductionKeywords(minReducer);
-        UpdateReductionKeywords(maxReducer);
-        ToggleDoubleLoad();
+            Debug.Log("Enabling");
+            InitializeMeshes();
+            InitializePredictedTransform();
+            InitializeRenderParams();
+            InitializeVoxelGrid();
+
+            cachedCalculationMode = boundsCalculationMode;
+            UpdateReductionKeywords(minReducer);
+            UpdateReductionKeywords(maxReducer);
+            ToggleDoubleLoad();
+
+            buffersInitialized = true;
+        }
     }
     
     public virtual void IterateSystem() {
@@ -340,43 +357,31 @@ public class IteratedFunctionSystem : MonoBehaviour {
     public bool dumpData = false;
     public bool updateGizmoPoints = false;
     void PredictFinalTransform() {
-        // Reset System
-        int cubeRootParticleCount = Mathf.CeilToInt(Mathf.Pow(lowDetailParticleCount, 1.0f / 3.0f));
-        particleUpdater.SetInt("_CubeResolution", cubeRootParticleCount);
-        particleUpdater.SetFloat("_CubeSize", 0);
-
-        particleUpdater.SetBuffer(0, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-        particleUpdater.SetBuffer(0, "_IndexBuffer", lowDetailMesh.GetIndexBuffer());
-        particleUpdater.Dispatch(0, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
-
         // Seed First Iteration
         int transformCount = affineTransformations.GetTransformCount();
 
-        particleUpdater.SetInt("_TransformationCount", transformCount);
-        particleUpdater.SetInt("_GenerationOffset", 0);
-        particleUpdater.SetInt("_GenerationLimit", transformCount);
-        particleUpdater.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-        particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
-        particleUpdater.Dispatch(2, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+        parallelReducer.SetInt("_TransformationCount", transformCount);
+        parallelReducer.SetBuffer(4, "_OutputBuffer", lowDetailIterationBuffers[0]);
+        parallelReducer.SetBuffer(4, "_Transformations", affineTransformations.GetAffineBuffer());
 
-        int iteratedParticles = transformCount;
-        int previousGenerationSize = transformCount;
-        while (iteratedParticles < lowDetailParticleCount) {
-            int generationSize = previousGenerationSize * transformCount;
+        parallelReducer.Dispatch(4, 1, 1, 1); // Assumes transform count <64
 
-            particleUpdater.SetInt("_GenerationOffset", iteratedParticles);
-            particleUpdater.SetInt("_GenerationLimit", (int)Mathf.Clamp(iteratedParticles + generationSize, 0, lowDetailParticleCount));
+        for (int i = 1; i < lowDetailGenerations - 1; ++i) {
+            parallelReducer.SetBuffer(5, "_InputBuffer", lowDetailIterationBuffers[i - 1]);
+            parallelReducer.SetBuffer(5, "_OutputBuffer", lowDetailIterationBuffers[i]);
+            parallelReducer.SetBuffer(5, "_Transformations", affineTransformations.GetAffineBuffer());
 
-            particleUpdater.SetBuffer(2, "_VertexBuffer", lowDetailMesh.GetVertexBuffer(0));
-            particleUpdater.SetBuffer(2, "_Transformations", affineTransformations.GetAffineBuffer());
+            int bufferSize = Mathf.CeilToInt(Mathf.Pow(affineTransformations.GetTransformCount(), i + 1));
+            parallelReducer.Dispatch(5, (int)Mathf.Max(1, Mathf.CeilToInt(bufferSize / threadsPerGroup)), 1, 1);
 
-            
-            particleUpdater.Dispatch(2, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
-            
-
-            iteratedParticles += generationSize;
-            previousGenerationSize = generationSize;
         }
+        
+        parallelReducer.SetBuffer(5, "_InputBuffer", lowDetailIterationBuffers[lowDetailGenerations - 2]);
+        parallelReducer.SetBuffer(5, "_OutputBuffer", lowDetailMesh.GetVertexBuffer(0));
+        parallelReducer.SetBuffer(5, "_Transformations", affineTransformations.GetAffineBuffer());
+
+        parallelReducer.Dispatch(5, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+
 
         if (boundsCalculationMode == BoundsCalculationMode.SingleThreadedScan) {
             parallelReducer.SetBuffer(0, "_InputBuffer", lowDetailMesh.GetVertexBuffer(0));
@@ -533,13 +538,33 @@ public class IteratedFunctionSystem : MonoBehaviour {
     }
 
     void Update() {
+        // Wait for affine transformations to create data buffers
+        if (affineTransformations.GetTransformCount() == 0) return;
+
+        if (!buffersInitialized) {
+            InitializeMeshes();
+            InitializePredictedTransform();
+            InitializeRenderParams();
+            InitializeVoxelGrid();
+
+            cachedCalculationMode = boundsCalculationMode;
+            UpdateReductionKeywords(minReducer);
+            UpdateReductionKeywords(maxReducer);
+            ToggleDoubleLoad();
+
+            buffersInitialized = true;
+        }
+
         // Some weird race condition makes it so that the correct transformation count doesn't make it here in time so it breaks the instancing
         // As a hack, the first 1 second of runtime will repeatedly set this value in order to ensure proper functionality. In the industry, we call this a "loading screen"
-        if (Time.time < 1 || updateInstanceCount) {
+        if (updateInstanceCount) {
             instancedCommandIndexedData[0].instanceCount = System.Convert.ToUInt32(affineTransformations.GetTransformCount());
             instancedCommandIndexedData[0].indexCountPerInstance = particlesPerBatch;
 
             instancedCommandBuffer.SetData(instancedCommandIndexedData);
+            instancedCommandIndexedData[0].indexCountPerInstance = lowDetailParticleCount;
+
+            lowDetailCommandBuffer.SetData(instancedCommandIndexedData);
             updateInstanceCount = false;
 
             Debug.Log("Particles in memory: " + (particlesPerBatch * batchCount).ToString());
@@ -578,6 +603,12 @@ public class IteratedFunctionSystem : MonoBehaviour {
             UnityEngine.Object.Destroy(pointCloudMeshes[i]);
         }
 
+        for (int i = 0; i < lowDetailIterationBuffers.Length; ++i) {
+            lowDetailIterationBuffers[i].Release();
+        }
+
+        lowDetailMesh.GetVertexBuffer(0).Release();
+        lowDetailMesh.GetIndexBuffer().Release();
         UnityEngine.Object.Destroy(lowDetailMesh);
 
         reductionBuffer.Release();

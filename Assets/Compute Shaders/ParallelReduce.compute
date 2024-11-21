@@ -3,6 +3,9 @@
 #pragma kernel FinalReduce
 #pragma kernel ReductionToTransformation
 
+#pragma kernel FirstLODIteration
+#pragma kernel LODIteration
+
 RWStructuredBuffer<float3> _OutputBuffer, _InputBuffer;
 uint _ReductionBufferSize;
 
@@ -184,4 +187,24 @@ void ReductionToTransformation(uint3 id : SV_DISPATCHTHREADID, uint3 gtid : SV_G
     // };
 
     _FinalTransformBuffer[0] = finalTransform;
+}
+
+StructuredBuffer<float4x4> _Transformations;
+int _TransformationCount;
+
+[numthreads(1, 1, 1)]
+void FirstLODIteration(uint3 id : SV_DISPATCHTHREADID) {
+    for (int i = 0; i < _TransformationCount; ++i) {
+        _OutputBuffer[id.x + i] = mul(_Transformations[i], float4(0, 0, 0, 1)).xyz;
+    }
+}
+
+[numthreads(64, 1, 1)]
+void LODIteration(uint3 id : SV_DISPATCHTHREADID) {
+    float3 seed = _InputBuffer[id.x];
+
+    int outputIndex = id.x * _TransformationCount;
+    for (int i = 0; i < _TransformationCount; ++i) {
+        _OutputBuffer[outputIndex + i] = mul(_Transformations[i], float4(seed, 1)).xyz;
+    }
 }

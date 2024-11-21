@@ -137,6 +137,8 @@ public class SetBlender : MonoBehaviour {
     private void MoveTowardSet() {
         blendedSet.Clear();
 
+        if (moveTowardSet.Count != set1.transformSet.Count) moveTowardSet = new List<TransformInstructions>(set1.transformSet);
+
         for (int i = 0; i < moveTowardSet.Count; ++i) {
             moveTowardSet[i] = MoveTowardInstructions(moveTowardSet[i], set2.transformSet[i], speed);
             blendedSet.Add(moveTowardSet[i]);
