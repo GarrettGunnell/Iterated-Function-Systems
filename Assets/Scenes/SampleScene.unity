@@ -161,7 +161,7 @@ MonoBehaviour:
   affineTransformations: {fileID: 198840496}
   instancedPointShader: {fileID: 4800000, guid: da60c5ceac9d93949914277c9acee32e, type: 3}
   particleUpdater: {fileID: 7200000, guid: 8faac77cdf44eae4caaf13a51b8e079e, type: 3}
-  parallelReducer: {fileID: 0}
+  parallelReducer: {fileID: 7200000, guid: 3285589765ffd20489593752acd50a05, type: 3}
   particlesPerBatch: 1048576
   batchCount: 1
   updateInstanceCount: 0
@@ -205,7 +205,7 @@ MonoBehaviour:
   particlesPerBatch: 1048576
   batchCount: 10
   updateInstanceCount: 0
-  lowDetailGenerations: 21
+  lowDetailGenerations: 13
   viewLowDetail: 0
   uncapped: 1
   pointCloudMeshes:
@@ -220,7 +220,7 @@ MonoBehaviour:
   predictOrigin: 0
   boundsCalculationMode: 4
   toggleDoubleLoad: 1
-  scalePadding: 1
+  scalePadding: 0.5
   voxelShader: {fileID: 4800000, guid: 0d552777edf877b469ce5b6e1ac22326, type: 3}
   voxelMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   voxelBounds: 3
@@ -332,7 +332,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affinePreset: 6
-  randomInstructionCount: 2
+  randomInstructionCount: 3
   resetToPreset: 0
   transformSet:
   - scale: {x: 0.7114281, y: 0.42056277, z: 0.62311846}
@@ -341,6 +341,12 @@ MonoBehaviour:
     shearZ: {x: -0.14304738, y: -0.032437965, z: 0}
     rotate: {x: -19.95215, y: -23.07871, z: 3.3337631}
     translate: {x: -0.4327373, y: -0.43214884, z: 0.57842535}
+  - scale: {x: 0.45320323, y: 0.47105843, z: 0.41583723}
+    shearX: {x: 0, y: 0.09270305, z: 0.044526786}
+    shearY: {x: -0.19250889, y: 0, z: -0.19290496}
+    shearZ: {x: -0.18165894, y: 0.10299754, z: 0}
+    rotate: {x: 2.5488434, y: -5.270279, z: 23.032948}
+    translate: {x: -0.4056494, y: -0.5833988, z: -0.5100738}
   - scale: {x: 0.45320323, y: 0.47105843, z: 0.41583723}
     shearX: {x: 0, y: 0.09270305, z: 0.044526786}
     shearY: {x: -0.19250889, y: 0, z: -0.19290496}
@@ -367,7 +373,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   affinePreset: 6
-  randomInstructionCount: 2
+  randomInstructionCount: 3
   resetToPreset: 0
   transformSet:
   - scale: {x: 0.64567, y: 0.6520087, z: 0.4992622}
@@ -376,6 +382,12 @@ MonoBehaviour:
     shearZ: {x: -0.06954615, y: -0.18209101, z: 0}
     rotate: {x: -14.159281, y: 30.700146, z: -4.5448456}
     translate: {x: -0.483831, y: -0.5847448, z: 0.54048765}
+  - scale: {x: 0.51383644, y: 0.47638172, z: 0.47241908}
+    shearX: {x: 0, y: -0.117562726, z: -0.04556334}
+    shearY: {x: -0.11148821, y: 0, z: -0.046085566}
+    shearZ: {x: -0.06789043, y: 0.14539348, z: 0}
+    rotate: {x: -13.756258, y: -10.734333, z: -26.906143}
+    translate: {x: -0.46300432, y: -0.44532868, z: -0.5514636}
   - scale: {x: 0.51383644, y: 0.47638172, z: 0.47241908}
     shearX: {x: 0, y: -0.117562726, z: -0.04556334}
     shearY: {x: -0.11148821, y: 0, z: -0.046085566}
@@ -619,7 +631,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0.16037738, g: 0.12784801, b: 0.1600946, a: 0}
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0

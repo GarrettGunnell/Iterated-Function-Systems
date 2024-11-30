@@ -391,7 +391,7 @@ public class IteratedFunctionSystem : MonoBehaviour {
         parallelReducer.SetBuffer(5, "_OutputBuffer", lowDetailMesh.GetVertexBuffer(0));
         parallelReducer.SetBuffer(5, "_Transformations", affineTransformations.GetAffineBuffer());
 
-        parallelReducer.Dispatch(5, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup), 1, 1);
+        parallelReducer.Dispatch(5, Mathf.CeilToInt(lowDetailParticleCount / threadsPerGroup) - 1, 1, 1);
 
 
         if (boundsCalculationMode == BoundsCalculationMode.SingleThreadedScan) {
